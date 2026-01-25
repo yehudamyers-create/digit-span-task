@@ -119,13 +119,23 @@ const loopTimeline = {
 // End screen
 const endScreen = {
     type: jsPsychHtmlKeyboardResponse,
-    stimulus: () => `
-        <div class="center small">
-        Finished.<br><br>
-        Maximum span: <b>${maxSpan}</b><br><br>
-        Press any key to close.
-        </div>
-    `
+    stimulus: () => {
+        // Automatically redirect after 3 seconds
+        setTimeout(() => {
+            window.location.href = 'https://huji.questionpro.eu/t/AB3u3DjZB3wTe4?digit_span_score=' + maxSpan;
+        }, 3000);
+        
+        return `
+            <div class="center small">
+            Finished.<br><br>
+            Maximum span: <b>${maxSpan}</b><br><br>
+            Returning to survey in 3 seconds...<br><br>
+            <small style="color: #666;">Please remember your score: <b>${maxSpan}</b></small>
+            </div>
+        `;
+    },
+    choices: "NO_KEYS",
+    trial_duration: 3000
 };
 
 // Run experiment
