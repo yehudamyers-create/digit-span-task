@@ -42,6 +42,32 @@ button {
   80% { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(0.8); }
 }
+.final-screen {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 60px 20px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.score-box {
+  background: white;
+  color: #333;
+  padding: 40px 60px;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  margin: 20px;
+}
+.close-instruction {
+  background: rgba(255,255,255,0.2);
+  padding: 20px 30px;
+  border-radius: 10px;
+  margin-top: 30px;
+  font-size: 20px;
+  border: 2px solid rgba(255,255,255,0.3);
+}
 </style>
 </head>
 <body></body>
@@ -126,37 +152,24 @@ const loopTimeline = {
 const endScreen = {
     type: jsPsychHtmlKeyboardResponse,
     stimulus: () => {
-        // Send score to parent window (QuestionPro)
-        if (window.opener) {
-            window.opener.postMessage({
-                type: 'digit_span_complete',
-                score: maxSpan
-            }, '*');
-        }
-        if (window.parent && window.parent !== window) {
-            window.parent.postMessage({
-                type: 'digit_span_complete',
-                score: maxSpan
-            }, '*');
-        }
-        
         return `
-            <div class="center small">
-            Finished.<br><br>
-            Maximum span: <b>${maxSpan}</b><br><br>
-            <p style="font-size: 18px; color: #666;">Closing in a moment...</p>
+            <div class="final-screen">
+                <div class="score-box">
+                    <h2 style="margin-top: 0; font-size: 32px;">Test Complete!</h2>
+                    <p style="font-size: 20px; color: #666;">Your Maximum Digit Span:</p>
+                    <div style="font-size: 72px; font-weight: bold; color: #667eea; margin: 20px 0;">
+                        ${maxSpan}
+                    </div>
+                </div>
+                <div class="close-instruction">
+                    <p style="margin: 0; font-size: 24px; font-weight: 600;">
+                        ✓ Please close this window to continue the survey
+                    </p>
+                </div>
             </div>
         `;
     },
-    trial_duration: 2000,
-    on_finish: () => {
-        // Try to close if it's a popup
-        setTimeout(() => {
-            if (window.opener) {
-                window.close();
-            }
-        }, 100);
-    }
+    choices: "NO_KEYS"
 };
 
 jsPsych.run([loopTimeline, endScreen]);
