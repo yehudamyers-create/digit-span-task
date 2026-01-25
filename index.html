@@ -3,29 +3,44 @@
 <head>
 <meta charset="utf-8">
 <title>Sequential Digit Span</title>
-<!-- jsPsych v7 CSS -->
 <link href="https://unpkg.com/jspsych@7.3.0/css/jspsych.css" rel="stylesheet">
-<!-- jsPsych v7 core + plugins from CDN -->
 <script src="https://unpkg.com/jspsych@7.3.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.0.0"></script>
 <style>
-body { background: #f4f6fb; font-family: Arial, sans-serif; }
-.center { text-align: center; font-size: 48px; font-weight: 600; }
-.small { font-size: 22px; }
-input { font-size: 28px; width: 220px; text-align: center; padding: 8px; }
-button { font-size: 22px; padding: 8px 16px; cursor: pointer; }
-
-/* Fade in/out animation for digits */
-@keyframes fadeInOut {
-    0% { opacity: 0; transform: scale(0.9); }
-    20% { opacity: 1; transform: scale(1); }
-    80% { opacity: 1; transform: scale(1); }
-    100% { opacity: 0; transform: scale(0.9); }
+body { 
+  background: #f4f6fb; 
+  font-family: Arial, sans-serif; 
+  margin: 0;
+  padding: 0;
 }
-
-.digit-display {
-    animation: fadeInOut 800ms ease-in-out;
+.center { 
+  text-align: center; 
+  font-size: 48px; 
+  font-weight: 600; 
+}
+.small { 
+  font-size: 22px; 
+}
+input { 
+  font-size: 28px; 
+  width: 220px; 
+  text-align: center; 
+  padding: 8px; 
+}
+button { 
+  font-size: 22px; 
+  padding: 8px 16px; 
+  cursor: pointer; 
+}
+.digit {
+  animation: fadeInOut 0.8s ease-in-out;
+}
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: scale(0.8); }
+  20% { opacity: 1; transform: scale(1); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
 }
 </style>
 </head>
@@ -37,8 +52,8 @@ let failures = 0;
 let maxSpan = 0;
 const ceiling = 20;
 let currentSeq = "";
+let digitIndex = 0;
 
-// Generate random digit sequence
 function makeDigits(n) {
     let s = "";
     for (let i = 0; i < n; i++) {
@@ -47,17 +62,40 @@ function makeDigits(n) {
     return s;
 }
 
+function recallTrial() {
+    return {
+        type: jsPsychSurveyHtmlForm,
+        html: `
+            <div class="center small">
+            Type the numbers you just saw:<br><br>
+            <input name="resp" pattern="[0-9]*" inputmode="numeric" id="recall-input"><br><br>
+            <button type="submit">Continue</button>
+            </div>
+        `,
+        on_load: function() {
+            document.getElementById('recall-input').focus();
+        },
+        on_finish: data => {
+            const response = data.response?.resp?.trim() || "";
+            if (response === currentSeq) {
+                digitLength++;
+                failures = 0;
+                maxSpan = digitLength - 1;
+            } else {
+                failures++;
+                if (digitLength - 1 > maxSpan) {
+                    maxSpan = digitLength - 1;
+                }
+            }
+        }
+    };
+}
 
-
-let digitIndex = 0;
-
-// Adaptive loop timeline
 const loopTimeline = {
     timeline: [
         {
             type: jsPsychHtmlKeyboardResponse,
             stimulus: () => {
-                // Generate new sequence each time
                 currentSeq = makeDigits(digitLength);
                 digitIndex = 0;
                 return `<div class="center small">Get ready...</div>`;
@@ -71,58 +109,32 @@ const loopTimeline = {
                 stimulus: () => {
                     const digit = currentSeq[digitIndex];
                     digitIndex++;
-                    return `<div class="center digit-display">${digit}</div>`;
+                    return `<div class="center digit">${digit}</div>`;
                 },
                 choices: "NO_KEYS",
                 trial_duration: 800
             }],
-            conditional_function: () => {
-                return digitIndex < currentSeq.length;
-            },
-            loop_function: () => {
-                return digitIndex < currentSeq.length;
-            }
+            loop_function: () => digitIndex < currentSeq.length
         },
-        {
-            type: jsPsychSurveyHtmlForm,
-            html: `
-                <div class="center small">
-                Type the numbers you just saw:<br><br>
-                <input name="resp" pattern="[0-9]*" inputmode="numeric" id="resp-input"><br><br>
-                <button type="submit">Continue</button>
-                </div>
-            `,
-            on_load: () => {
-                // Focus the input field immediately when the page loads
-                document.getElementById('resp-input').focus();
-            },
-            on_finish: data => {
-                const response = data.response?.resp?.trim() || "";
-                if (response === currentSeq) {
-                    digitLength++;
-                    failures = 0;
-                    maxSpan = digitLength - 1;
-                } else {
-                    failures++;
-                    if (digitLength - 1 > maxSpan) {
-                        maxSpan = digitLength - 1;
-                    }
-                }
-            }
-        }
+        recallTrial()
     ],
     loop_function: () => {
         return !(failures >= 2 || digitLength > ceiling);
     }
 };
 
-// End screen
 const endScreen = {
     type: jsPsychHtmlKeyboardResponse,
     stimulus: () => {
-        // Send score back to the parent window (Question Pro)
+        // Send score to parent window (QuestionPro)
         if (window.opener) {
             window.opener.postMessage({
+                type: 'digit_span_complete',
+                score: maxSpan
+            }, '*');
+        }
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
                 type: 'digit_span_complete',
                 score: maxSpan
             }, '*');
@@ -132,17 +144,21 @@ const endScreen = {
             <div class="center small">
             Finished.<br><br>
             Maximum span: <b>${maxSpan}</b><br><br>
-            Your score has been sent to the survey.<br><br>
-            <button onclick="window.close()" style="font-size: 22px; padding: 12px 24px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px;">
-                Close Window & Return to Survey
-            </button>
+            <p style="font-size: 18px; color: #666;">Closing in a moment...</p>
             </div>
         `;
     },
-    choices: "NO_KEYS"
+    trial_duration: 2000,
+    on_finish: () => {
+        // Try to close if it's a popup
+        setTimeout(() => {
+            if (window.opener) {
+                window.close();
+            }
+        }, 100);
+    }
 };
 
-// Run experiment
 jsPsych.run([loopTimeline, endScreen]);
 </script>
 </body>
