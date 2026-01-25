@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sequential Digit Span</title>
+<!-- jsPsych v7 CSS -->
+<link href="https://unpkg.com/jspsych@7.3.0/css/jspsych.css" rel="stylesheet">
+<!-- jsPsych v7 core + plugins from CDN -->
+<script src="https://unpkg.com/jspsych@7.3.0"></script>
+<script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.0"></script>
+<script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.0.0"></script>
+<style>
+body { background: #f4f6fb; font-family: Arial, sans-serif; }
+.center { text-align: center; font-size: 48px; font-weight: 600; }
+.small { font-size: 22px; }
+input { font-size: 28px; width: 220px; text-align: center; padding: 8px; }
+button { font-size: 22px; padding: 8px 16px; cursor: pointer; }
+
+/* Fade in/out animation for digits */
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: scale(0.9); }
+    20% { opacity: 1; transform: scale(1); }
+    80% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.9); }
+}
+
+.digit-display {
+    animation: fadeInOut 800ms ease-in-out;
+}
+</style>
+</head>
+<body></body>
+<script>
+const jsPsych = initJsPsych({ override_safe_mode: true });
+let digitLength = 3;
+let failures = 0;
+let maxSpan = 0;
+const ceiling = 20;
+let currentSeq = "";
+
+// Generate random digit sequence
+function makeDigits(n) {
+    let s = "";
+    for (let i = 0; i < n; i++) {
+        s += Math.floor(Math.random() * 10);
+    }
+    return s;
+}
+
+
+
+let digitIndex = 0;
+
+// Adaptive loop timeline
+const loopTimeline = {
+    timeline: [
+        {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: () => {
+                // Generate new sequence each time
+                currentSeq = makeDigits(digitLength);
+                digitIndex = 0;
+                return `<div class="center small">Get ready...</div>`;
+            },
+            choices: "NO_KEYS",
+            trial_duration: 1000
+        },
+        {
+            timeline: [{
+                type: jsPsychHtmlKeyboardResponse,
+                stimulus: () => {
+                    const digit = currentSeq[digitIndex];
+                    digitIndex++;
+                    return `<div class="center digit-display">${digit}</div>`;
+                },
+                choices: "NO_KEYS",
+                trial_duration: 800
+            }],
+            conditional_function: () => {
+                return digitIndex < currentSeq.length;
+            },
+            loop_function: () => {
+                return digitIndex < currentSeq.length;
+            }
+        },
+        {
+            type: jsPsychSurveyHtmlForm,
+            html: `
+                <div class="center small">
+                Type the numbers you just saw:<br><br>
+                <input name="resp" pattern="[0-9]*" inputmode="numeric" id="resp-input"><br><br>
+                <button type="submit">Continue</button>
+                </div>
+            `,
+            on_load: () => {
+                // Focus the input field immediately when the page loads
+                document.getElementById('resp-input').focus();
+            },
+            on_finish: data => {
+                const response = data.response?.resp?.trim() || "";
+                if (response === currentSeq) {
+                    digitLength++;
+                    failures = 0;
+                    maxSpan = digitLength - 1;
+                } else {
+                    failures++;
+                    if (digitLength - 1 > maxSpan) {
+                        maxSpan = digitLength - 1;
+                    }
+                }
+            }
+        }
+    ],
+    loop_function: () => {
+        return !(failures >= 2 || digitLength > ceiling);
+    }
+};
+
+// End screen
+const endScreen = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: () => `
+        <div class="center small">
+        Finished.<br><br>
+        Maximum span: <b>${maxSpan}</b><br><br>
+        Press any key to close.
+        </div>
+    `
+};
+
+// Run experiment
+jsPsych.run([loopTimeline, endScreen]);
+</script>
+</body>
+</html>
