@@ -79,6 +79,7 @@ let maxSpan = 0;
 const ceiling = 20;
 let currentSeq = "";
 let digitIndex = 0;
+let practiceCorrect = false;
 
 function makeDigits(n) {
     let s = "";
@@ -116,6 +117,102 @@ function recallTrial() {
         }
     };
 }
+
+// Instructions screen
+const instructions = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+        <div class="center small" style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <h2>Digit Span Test Instructions</h2>
+            <p style="text-align: left; line-height: 1.6;">
+                In this test, you will see a sequence of digits appear one at a time on the screen.
+            </p>
+            <p style="text-align: left; line-height: 1.6;">
+                <strong>Your task:</strong> Remember the digits in the order they appeared, 
+                then type them back.
+            </p>
+            <p style="text-align: left; line-height: 1.6;">
+                The sequences will get longer as you go. The test ends after you make 2 mistakes.
+            </p>
+            <p style="margin-top: 40px; font-size: 18px;">
+                <strong>Let's start with a practice round.</strong>
+            </p>
+            <p style="color: #666;">Press any key to begin the practice</p>
+        </div>
+    `
+};
+
+// Practice trial
+const practiceTimeline = {
+    timeline: [
+        {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: `<div class="center small">Practice Round - Get ready...</div>`,
+            on_start: () => {
+                currentSeq = makeDigits(2); // Practice with 2 digits
+                digitIndex = 0;
+            },
+            choices: "NO_KEYS",
+            trial_duration: 1000
+        },
+        {
+            timeline: [{
+                type: jsPsychHtmlKeyboardResponse,
+                stimulus: () => {
+                    const digit = currentSeq[digitIndex];
+                    digitIndex++;
+                    return `<div class="center digit">${digit}</div>`;
+                },
+                choices: "NO_KEYS",
+                trial_duration: 800
+            }],
+            loop_function: () => digitIndex < currentSeq.length
+        },
+        {
+            type: jsPsychSurveyHtmlForm,
+            html: `
+                <div class="center small">
+                <strong>Practice:</strong> Type the numbers you just saw:<br><br>
+                <input name="resp" pattern="[0-9]*" inputmode="numeric" id="practice-input"><br><br>
+                <button type="submit">Continue</button>
+                </div>
+            `,
+            on_load: function() {
+                document.getElementById('practice-input').focus();
+            },
+            on_finish: data => {
+                const response = data.response?.resp?.trim() || "";
+                practiceCorrect = (response === currentSeq);
+            }
+        },
+        {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: () => {
+                if (practiceCorrect) {
+                    return `
+                        <div class="center small" style="color: #4CAF50;">
+                            <h3>✓ Correct!</h3>
+                            <p>You remembered: <strong>${currentSeq}</strong></p>
+                            <p style="margin-top: 30px;">Great! Now let's begin the actual test.</p>
+                            <p style="color: #666; margin-top: 20px;">Press any key to start</p>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="center small" style="color: #ff6b6b;">
+                            <h3>Not quite right</h3>
+                            <p>The correct sequence was: <strong>${currentSeq}</strong></p>
+                            <p style="margin-top: 30px;">That's okay! Remember to type the digits in the order you saw them.</p>
+                            <p style="margin-top: 20px;">Let's begin the actual test.</p>
+                            <p style="color: #666; margin-top: 20px;">Press any key to start</p>
+                        </div>
+                    `;
+                }
+            },
+            trial_duration: null
+        }
+    ]
+};
 
 const loopTimeline = {
     timeline: [
@@ -178,7 +275,7 @@ const endScreen = {
     choices: "NO_KEYS"
 };
 
-jsPsych.run([loopTimeline, endScreen]);
+jsPsych.run([instructions, practiceTimeline, loopTimeline, endScreen]);
 </script>
 </body>
 </html>
