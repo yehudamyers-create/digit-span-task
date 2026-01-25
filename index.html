@@ -120,23 +120,28 @@ const loopTimeline = {
 const endScreen = {
     type: jsPsychHtmlKeyboardResponse,
     stimulus: () => {
-        // Store score in sessionStorage so Question Pro can read it
-        sessionStorage.setItem('digit_span_score', maxSpan);
-        
-        // Also store in localStorage as backup
-        localStorage.setItem('digit_span_score', maxSpan);
-        
-        // Automatically redirect after 3 seconds
+        // Send score back to the parent window (Question Pro)
         setTimeout(() => {
-            window.location.href = 'https://huji.questionpro.eu/t/AB3u3DjZB3wTe4';
-        }, 3000);
+            if (window.opener) {
+                // Send message to parent window
+                window.opener.postMessage({
+                    type: 'digit_span_complete',
+                    score: maxSpan
+                }, '*');
+                
+                // Close this popup after sending the score
+                setTimeout(() => {
+                    window.close();
+                }, 2000);
+            }
+        }, 1000);
         
         return `
             <div class="center small">
             Finished.<br><br>
             Maximum span: <b>${maxSpan}</b><br><br>
-            Your score has been saved.<br><br>
-            Returning to survey in 3 seconds...<br><br>
+            Your score has been recorded.<br><br>
+            This window will close automatically...<br><br>
             </div>
         `;
     },
