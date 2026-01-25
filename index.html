@@ -121,32 +121,25 @@ const endScreen = {
     type: jsPsychHtmlKeyboardResponse,
     stimulus: () => {
         // Send score back to the parent window (Question Pro)
-        setTimeout(() => {
-            if (window.opener) {
-                // Send message to parent window
-                window.opener.postMessage({
-                    type: 'digit_span_complete',
-                    score: maxSpan
-                }, '*');
-                
-                // Close this popup after sending the score
-                setTimeout(() => {
-                    window.close();
-                }, 2000);
-            }
-        }, 1000);
+        if (window.opener) {
+            window.opener.postMessage({
+                type: 'digit_span_complete',
+                score: maxSpan
+            }, '*');
+        }
         
         return `
             <div class="center small">
             Finished.<br><br>
             Maximum span: <b>${maxSpan}</b><br><br>
-            Your score has been recorded.<br><br>
-            This window will close automatically...<br><br>
+            Your score has been sent to the survey.<br><br>
+            <button onclick="window.close()" style="font-size: 22px; padding: 12px 24px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px;">
+                Close Window & Return to Survey
+            </button>
             </div>
         `;
     },
-    choices: "NO_KEYS",
-    trial_duration: 3000
+    choices: "NO_KEYS"
 };
 
 // Run experiment
