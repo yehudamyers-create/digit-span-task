@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Operation Span Test</title>
-<link href="https://unpkg.com/jspsych@7.3.0/css/jsych.css" rel="stylesheet">
+<link href="https://unpkg.com/jspsych@7.3.0/css/jspsych.css" rel="stylesheet">
 <script src="https://unpkg.com/jspsych@7.3.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.0"></script>
@@ -42,7 +42,7 @@ body {
   grid-template-columns: repeat(4, 80px);
   gap: 10px;
   justify-content: center;
-  margin: 30px auto;
+  margin: 10px auto;
 }
 .letter-button {
   width: 80px;
@@ -67,7 +67,7 @@ body {
 .instructions {
   max-width: 700px;
   margin: 0 auto;
-  padding: 40px 20px;
+  padding: 20px 20px;
   line-height: 1.8;
   font-size: 18px;
 }
@@ -79,7 +79,7 @@ body {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  margin: 20px 10px;
+  margin: 10px 10px;
 }
 .button-large:hover {
   background: #5568d3;
@@ -114,7 +114,7 @@ body {
   display: flex !important;
   justify-content: center !important;
   gap: 20px !important;
-  margin-top: 40px !important;
+  margin-top: 20px !important;
   flex-wrap: wrap !important;
 }
 .final-screen {
@@ -134,6 +134,13 @@ body {
   border-radius: 20px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   margin: 20px;
+}
+.recall-container {
+  padding: 10px 20px;
+}
+.recall-container h3 {
+  margin-top: 5px;
+  margin-bottom: 10px;
 }
 </style>
 </head>
@@ -197,6 +204,32 @@ function getRandomLetter() {
   return letter;
 }
 
+// Helper function to enable Enter key for button clicks
+function enableEnterKey(buttonIndex = 0) {
+  setTimeout(() => {
+    const buttons = document.querySelectorAll('.jspsych-btn');
+    if (buttons.length > 0) {
+      const handler = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          buttons[buttonIndex].click();
+        }
+      };
+      document.addEventListener('keydown', handler);
+      // Store handler so we can remove it later
+      document._enterHandler = handler;
+    }
+  }, 100);
+}
+
+// Helper to remove Enter key handler
+function removeEnterKey() {
+  if (document._enterHandler) {
+    document.removeEventListener('keydown', document._enterHandler);
+    document._enterHandler = null;
+  }
+}
+
 // Prolific ID entry
 const prolificEntry = {
   type: jsPsychSurveyHtmlForm,
@@ -216,7 +249,15 @@ const prolificEntry = {
   `,
   button_label: '<span style="font-size: 20px; padding: 5px 20px;">Continue</span>',
   on_load: function() {
-    document.getElementById('prolific-id-input').focus();
+    const input = document.getElementById('prolific-id-input');
+    input.focus();
+    // Enable Enter key to submit form
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.querySelector('#jspsych-survey-html-form-next').click();
+      }
+    });
   },
   on_finish: data => {
     prolificID = data.response?.prolific_id?.trim() || "";
@@ -239,9 +280,16 @@ const instructions = {
         <strong>Important:</strong> You must try your best on the math problems! Your math accuracy must be at least 85% for your data to be valid.
       </p>
       <p style="text-align: center; margin-top: 30px;">Let's start with a quick practice round.</p>
+      <p style="text-align: center; color: #999; font-size: 14px;">(Press Enter or click the button below)</p>
     </div>
   `,
-  choices: ['Begin Practice']
+  choices: ['Begin Practice'],
+  on_load: () => {
+    enableEnterKey(0);
+  },
+  on_finish: () => {
+    removeEnterKey();
+  }
 };
 
 // Create practice trial (1 combined practice set, length 3)
@@ -257,6 +305,20 @@ function createPracticeSet() {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
+      on_load: () => {
+        // Enable Enter for True (index 0), or could add T/F keys
+        document.addEventListener('keydown', function trueKeyHandler(e) {
+          if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            document.querySelectorAll('.jspsych-btn')[0].click();
+            document.removeEventListener('keydown', trueKeyHandler);
+          } else if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            document.querySelectorAll('.jspsych-btn')[1].click();
+            document.removeEventListener('keydown', trueKeyHandler);
+          }
+        });
+      },
       on_finish: data => {
         const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
         totalMathTrials++;
@@ -279,14 +341,17 @@ function createPracticeSet() {
   trials.push({
     type: jsPsychHtmlButtonResponse,
     stimulus: `
-      <div class="instructions">
-        <h3>Recall the letters in order</h3>
-        <p>Click the letters in the order they appeared:</p>
-        <div id="selected-display" style="font-size: 32px; min-height: 50px; margin: 20px 0; color: #667eea; font-weight: bold;"></div>
+      <div class="recall-container">
+        <h3 style="text-align: center;">Recall the letters in order</h3>
+        <p style="text-align: center;">Click the letters in the order they appeared:</p>
+        <div id="selected-display" style="font-size: 32px; min-height: 40px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
         <div class="letter-grid">
           ${LETTERS.map(l => `<button class="letter-button" onclick="selectLetter('${l}')">${l}</button>`).join('')}
         </div>
-        <button class="button-large" onclick="clearLetters()">Clear</button>
+        <div style="text-align: center; margin-top: 5px;">
+          <button class="button-large" onclick="clearLetters()">Clear</button>
+        </div>
+        <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit)</p>
       </div>
     `,
     choices: ['Submit'],
@@ -300,8 +365,10 @@ function createPracticeSet() {
         selectedLetters = [];
         document.getElementById('selected-display').textContent = '';
       };
+      enableEnterKey(0);
     },
     on_finish: (data) => {
+      removeEnterKey();
       data.correct_letters = setLetters;
       data.recalled_letters = selectedLetters;
       const correct = JSON.stringify(setLetters) === JSON.stringify(selectedLetters);
@@ -325,6 +392,7 @@ function createPracticeSet() {
             <p>You remembered: <strong>${correctSeq}</strong></p>
             <p style="margin-top: 30px;">Great! Now let's begin the actual test.</p>
             <p style="color: #999;">In the real test, you won't get feedback.</p>
+            <p style="text-align: center; color: #999; font-size: 14px; margin-top: 15px;">(Press Enter to continue)</p>
           </div>
         `;
       } else {
@@ -335,11 +403,18 @@ function createPracticeSet() {
             <p>You entered: <strong>${yourSeq || '(nothing)'}</strong></p>
             <p style="margin-top: 30px;">Remember to click the letters in the exact order they appeared.</p>
             <p style="color: #999;">Let's begin the actual test now.</p>
+            <p style="text-align: center; color: #999; font-size: 14px; margin-top: 15px;">(Press Enter to continue)</p>
           </div>
         `;
       }
     },
-    choices: ['Start Main Test']
+    choices: ['Start Main Test'],
+    on_load: () => {
+      enableEnterKey(0);
+    },
+    on_finish: () => {
+      removeEnterKey();
+    }
   });
   
   return trials;
@@ -357,6 +432,20 @@ function createMainSet(setSize) {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
+      on_load: () => {
+        // Enable T/F and Enter keys
+        document.addEventListener('keydown', function mathKeyHandler(e) {
+          if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            document.querySelectorAll('.jspsych-btn')[0].click();
+            document.removeEventListener('keydown', mathKeyHandler);
+          } else if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            document.querySelectorAll('.jspsych-btn')[1].click();
+            document.removeEventListener('keydown', mathKeyHandler);
+          }
+        });
+      },
       on_finish: data => {
         const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
         totalMathTrials++;
@@ -395,13 +484,16 @@ function createMainSet(setSize) {
   trials.push({
     type: jsPsychHtmlButtonResponse,
     stimulus: `
-      <div class="instructions">
-        <h3>Recall the letters in order</h3>
-        <div id="selected-display" style="font-size: 32px; min-height: 50px; margin: 20px 0; color: #667eea; font-weight: bold;"></div>
+      <div class="recall-container">
+        <h3 style="text-align: center;">Recall the letters in order</h3>
+        <div id="selected-display" style="font-size: 32px; min-height: 40px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
         <div class="letter-grid">
           ${LETTERS.map(l => `<button class="letter-button" onclick="selectLetter('${l}')">${l}</button>`).join('')}
         </div>
-        <button class="button-large" onclick="clearLetters()">Clear</button>
+        <div style="text-align: center; margin-top: 5px;">
+          <button class="button-large" onclick="clearLetters()">Clear</button>
+        </div>
+        <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit)</p>
       </div>
     `,
     choices: ['Submit'],
@@ -415,8 +507,10 @@ function createMainSet(setSize) {
         selectedLetters = [];
         document.getElementById('selected-display').textContent = '';
       };
+      enableEnterKey(0);
     },
     on_finish: (data) => {
+      removeEnterKey();
       data.set_size = setSize;
       data.correct_letters = setLetters;
       data.recalled_letters = selectedLetters;
