@@ -2,10 +2,11 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Sequential Digit Span</title>
-<link href="https://unpkg.com/jspsych@7.3.0/css/jspsych.css" rel="stylesheet">
+<title>Operation Span Test</title>
+<link href="https://unpkg.com/jspsych@7.3.0/css/jsych.css" rel="stylesheet">
 <script src="https://unpkg.com/jspsych@7.3.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.0"></script>
+<script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.0.0"></script>
 <style>
 body { 
@@ -19,28 +20,69 @@ body {
   font-size: 48px; 
   font-weight: 600; 
 }
-.small { 
-  font-size: 22px; 
+.math-problem {
+  font-size: 36px;
+  font-weight: 600;
+  text-align: center;
+  margin: 40px 0;
 }
-input { 
-  font-size: 28px; 
-  width: 220px; 
-  text-align: center; 
-  padding: 8px; 
+.letter-display {
+  font-size: 72px;
+  font-weight: bold;
+  text-align: center;
+  color: #667eea;
+  animation: fadeIn 0.3s ease-in;
 }
-button { 
-  font-size: 22px; 
-  padding: 8px 16px; 
-  cursor: pointer; 
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
 }
-.digit {
-  animation: fadeInOut 0.8s ease-in-out;
+.letter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 80px);
+  gap: 10px;
+  justify-content: center;
+  margin: 30px auto;
 }
-@keyframes fadeInOut {
-  0% { opacity: 0; transform: scale(0.8); }
-  20% { opacity: 1; transform: scale(1); }
-  80% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0.8); }
+.letter-button {
+  width: 80px;
+  height: 80px;
+  font-size: 28px;
+  font-weight: bold;
+  border: 2px solid #667eea;
+  background: white;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.letter-button:hover {
+  background: #667eea;
+  color: white;
+  transform: scale(1.05);
+}
+.letter-button.selected {
+  background: #667eea;
+  color: white;
+}
+.instructions {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  line-height: 1.8;
+  font-size: 18px;
+}
+.button-large {
+  font-size: 22px;
+  padding: 15px 40px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 20px 10px;
+}
+.button-large:hover {
+  background: #5568d3;
 }
 .final-screen {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -60,271 +102,408 @@ button {
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   margin: 20px;
 }
-.close-instruction {
-  background: rgba(255,255,255,0.2);
-  padding: 20px 30px;
-  border-radius: 10px;
-  margin-top: 30px;
-  font-size: 20px;
-  border: 2px solid rgba(255,255,255,0.3);
-}
 </style>
 </head>
 <body></body>
 <script>
 const jsPsych = initJsPsych({ override_safe_mode: true });
-let digitLength = 3;
-let failures = 0;
-let maxSpan = 0;
-const ceiling = 20;
-let currentSeq = "";
-let digitIndex = 0;
-let practiceCorrect = false;
+
+// Variables
 let prolificID = "";
+let ospanScore = 0;
+let mathAccuracy = 0;
+let totalMathTrials = 0;
+let correctMathTrials = 0;
+let currentSetLetters = [];
+let selectedLetters = [];
+let allLettersUsed = [];
 
-function makeDigits(n) {
-    let s = "";
-    for (let i = 0; i < n; i++) {
-        s += Math.floor(Math.random() * 10);
-    }
-    return s;
+// Letters (consonants only, no vowels)
+const LETTERS = ['F', 'H', 'J', 'K', 'L', 'N', 'P', 'Q', 'R', 'S', 'T', 'Y'];
+
+// Generate math problems
+function generateMathProblem() {
+  const operations = [
+    { op: '+', fn: (a, b) => a + b },
+    { op: '-', fn: (a, b) => a - b },
+    { op: '×', fn: (a, b) => a * b }
+  ];
+  
+  const op1 = operations[Math.floor(Math.random() * operations.length)];
+  const op2 = operations[Math.floor(Math.random() * 2)]; // + or - for second
+  
+  const a = Math.floor(Math.random() * 9) + 1;
+  const b = Math.floor(Math.random() * 9) + 1;
+  const c = Math.floor(Math.random() * 9) + 1;
+  
+  const intermediate = op1.fn(a, b);
+  const correctAnswer = op2.fn(intermediate, c);
+  
+  // Sometimes show correct answer, sometimes incorrect
+  const showCorrect = Math.random() > 0.5;
+  const displayedAnswer = showCorrect ? correctAnswer : correctAnswer + (Math.random() > 0.5 ? 1 : -1);
+  
+  return {
+    problem: `(${a} ${op1.op} ${b}) ${op2.op} ${c} = ${displayedAnswer}`,
+    correct: showCorrect
+  };
 }
 
-function recallTrial() {
-    return {
-        type: jsPsychSurveyHtmlForm,
-        html: `
-            <div class="center small">
-            Type the numbers you just saw:<br><br>
-            <input name="resp" pattern="[0-9]*" inputmode="numeric" id="recall-input"><br><br>
-            <button type="submit">Continue</button>
-            </div>
-        `,
-        on_load: function() {
-            document.getElementById('recall-input').focus();
-        },
-        on_finish: data => {
-            const response = data.response?.resp?.trim() || "";
-            if (response === currentSeq) {
-                digitLength++;
-                failures = 0;
-                maxSpan = digitLength - 1;
-            } else {
-                failures++;
-                if (digitLength - 1 > maxSpan) {
-                    maxSpan = digitLength - 1;
-                }
-            }
-        }
-    };
+// Get random letter not used recently
+function getRandomLetter() {
+  let letter;
+  let attempts = 0;
+  do {
+    letter = LETTERS[Math.floor(Math.random() * LETTERS.length)];
+    attempts++;
+  } while (allLettersUsed.includes(letter) && attempts < 20);
+  
+  allLettersUsed.push(letter);
+  if (allLettersUsed.length > 8) allLettersUsed.shift();
+  
+  return letter;
 }
 
-// Prolific ID entry screen
+// Prolific ID entry
 const prolificEntry = {
-    type: jsPsychSurveyHtmlForm,
-    html: `
-        <div class="center small" style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-            <h2>Welcome to the Digit Span Test</h2>
-            <p style="margin: 30px 0;">Please enter your Prolific ID to begin:</p>
-            <input name="prolific_id" 
-                   id="prolific-id-input" 
-                   type="text" 
-                   required
-                   placeholder="Enter Prolific ID"
-                   style="font-size: 24px; width: 100%; max-width: 300px; padding: 12px; text-align: center; border: 2px solid #667eea; border-radius: 8px;">
-            <br><br>
-            <button type="submit" style="font-size: 20px; padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">
-                Continue
-            </button>
-        </div>
-    `,
-    on_load: function() {
-        document.getElementById('prolific-id-input').focus();
-    },
-    on_finish: data => {
-        prolificID = data.response?.prolific_id?.trim() || "";
-    }
+  type: jsPsychSurveyHtmlForm,
+  html: `
+    <div class="instructions">
+      <h2 style="text-align: center;">Welcome to the Operation Span Test</h2>
+      <p style="text-align: center;">Please enter your Prolific ID to begin:</p>
+      <div style="text-align: center;">
+        <input name="prolific_id" 
+               id="prolific-id-input" 
+               type="text" 
+               required
+               placeholder="Enter Prolific ID"
+               style="font-size: 24px; width: 100%; max-width: 300px; padding: 12px; text-align: center; border: 2px solid #667eea; border-radius: 8px;">
+      </div>
+    </div>
+  `,
+  button_label: '<span style="font-size: 20px; padding: 5px 20px;">Continue</span>',
+  on_load: function() {
+    document.getElementById('prolific-id-input').focus();
+  },
+  on_finish: data => {
+    prolificID = data.response?.prolific_id?.trim() || "";
+  }
 };
 
-// Instructions screen
+// Instructions
 const instructions = {
-    type: jsPsychHtmlKeyboardResponse,
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div class="instructions">
+      <h2 style="text-align: center;">Operation Span Test Instructions</h2>
+      <p>In this test, you will do two things at the same time:</p>
+      <ol style="text-align: left;">
+        <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false</li>
+        <li><strong>Remember letters</strong> - After each math problem, a letter will appear. Remember it!</li>
+      </ol>
+      <p>After a series of math problems and letters, you will be asked to recall all the letters <strong>in the order they appeared</strong>.</p>
+      <p style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+        <strong>Important:</strong> You must try your best on the math problems! Your math accuracy must be at least 85% for your data to be valid.
+      </p>
+      <p style="text-align: center; margin-top: 30px;">Let's start with a quick practice round.</p>
+    </div>
+  `,
+  choices: ['Begin Practice']
+};
+
+// Create practice trial (1 combined practice set, length 3)
+function createPracticeSet() {
+  const setSize = 3;
+  const setLetters = [];
+  const trials = [];
+  
+  for (let i = 0; i < setSize; i++) {
+    // Math problem
+    const mathProb = generateMathProblem();
+    trials.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
+      choices: ['True', 'False'],
+      on_finish: data => {
+        const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
+        totalMathTrials++;
+        if (correct) correctMathTrials++;
+      }
+    });
+    
+    // Letter
+    const letter = getRandomLetter();
+    setLetters.push(letter);
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `<div class="letter-display">${letter}</div>`,
+      choices: "NO_KEYS",
+      trial_duration: 800
+    });
+  }
+  
+  // Recall with feedback
+  trials.push({
+    type: jsPsychHtmlButtonResponse,
     stimulus: `
-        <div class="center small" style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-            <h2>Digit Span Test Instructions</h2>
-            <p style="text-align: left; line-height: 1.6;">
-                In this test, you will see a sequence of digits appear one at a time on the screen.
-            </p>
-            <p style="text-align: left; line-height: 1.6;">
-                <strong>Your task:</strong> Remember the digits in the order they appeared, 
-                then type them back.
-            </p>
-            <p style="text-align: left; line-height: 1.6;">
-                The sequences will get longer as you go. The test ends after you make 2 mistakes.
-            </p>
-            <p style="margin-top: 40px; font-size: 18px;">
-                <strong>Let's start with a practice round.</strong>
-            </p>
-            <p style="color: #666;">Press any key to begin the practice</p>
+      <div class="instructions">
+        <h3>Recall the letters in order</h3>
+        <p>Click the letters in the order they appeared:</p>
+        <div id="selected-display" style="font-size: 32px; min-height: 50px; margin: 20px 0; color: #667eea; font-weight: bold;"></div>
+        <div class="letter-grid">
+          ${LETTERS.map(l => `<button class="letter-button" onclick="selectLetter('${l}')">${l}</button>`).join('')}
         </div>
-    `
-};
-
-// Practice trial
-const practiceTimeline = {
-    timeline: [
-        {
-            type: jsPsychHtmlKeyboardResponse,
-            stimulus: `<div class="center small">Practice Round - Get ready...</div>`,
-            on_start: () => {
-                currentSeq = makeDigits(2); // Practice with 2 digits
-                digitIndex = 0;
-            },
-            choices: "NO_KEYS",
-            trial_duration: 1000
-        },
-        {
-            timeline: [{
-                type: jsPsychHtmlKeyboardResponse,
-                stimulus: () => {
-                    const digit = currentSeq[digitIndex];
-                    digitIndex++;
-                    return `<div class="center digit">${digit}</div>`;
-                },
-                choices: "NO_KEYS",
-                trial_duration: 800
-            }],
-            loop_function: () => digitIndex < currentSeq.length
-        },
-        {
-            type: jsPsychSurveyHtmlForm,
-            html: `
-                <div class="center small">
-                <strong>Practice:</strong> Type the numbers you just saw:<br><br>
-                <input name="resp" pattern="[0-9]*" inputmode="numeric" id="practice-input"><br><br>
-                <button type="submit">Continue</button>
-                </div>
-            `,
-            on_load: function() {
-                document.getElementById('practice-input').focus();
-            },
-            on_finish: data => {
-                const response = data.response?.resp?.trim() || "";
-                practiceCorrect = (response === currentSeq);
-            }
-        },
-        {
-            type: jsPsychHtmlKeyboardResponse,
-            stimulus: () => {
-                if (practiceCorrect) {
-                    return `
-                        <div class="center small" style="color: #4CAF50;">
-                            <h3>✓ Correct!</h3>
-                            <p>You remembered: <strong>${currentSeq}</strong></p>
-                            <p style="margin-top: 30px;">Great! Now let's begin the actual test.</p>
-                            <p style="color: #666; margin-top: 20px;">Press any key to start</p>
-                        </div>
-                    `;
-                } else {
-                    return `
-                        <div class="center small" style="color: #ff6b6b;">
-                            <h3>Not quite right</h3>
-                            <p>The correct sequence was: <strong>${currentSeq}</strong></p>
-                            <p style="margin-top: 30px;">That's okay! Remember to type the digits in the order you saw them.</p>
-                            <p style="margin-top: 20px;">Let's begin the actual test.</p>
-                            <p style="color: #666; margin-top: 20px;">Press any key to start</p>
-                        </div>
-                    `;
-                }
-            },
-            trial_duration: null
-        }
-    ]
-};
-
-const loopTimeline = {
-    timeline: [
-        {
-            type: jsPsychHtmlKeyboardResponse,
-            stimulus: () => {
-                currentSeq = makeDigits(digitLength);
-                digitIndex = 0;
-                return `<div class="center small">Get ready...</div>`;
-            },
-            choices: "NO_KEYS",
-            trial_duration: 1000
-        },
-        {
-            timeline: [{
-                type: jsPsychHtmlKeyboardResponse,
-                stimulus: () => {
-                    const digit = currentSeq[digitIndex];
-                    digitIndex++;
-                    return `<div class="center digit">${digit}</div>`;
-                },
-                choices: "NO_KEYS",
-                trial_duration: 800
-            }],
-            loop_function: () => digitIndex < currentSeq.length
-        },
-        recallTrial()
-    ],
-    loop_function: () => {
-        return !(failures >= 2 || digitLength > ceiling);
-    }
-};
-
-const endScreen = {
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: () => {
-        // Send data to Google Sheets
-        fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                prolific_id: prolificID,
-                score: maxSpan
-            })
-        }).catch(error => {
-            console.log('Error sending data:', error);
-        });
-        
-        return `
-            <div class="final-screen">
-                <div class="score-box">
-                    <p style="font-size: 16px; color: #999; margin-bottom: 10px;">
-                        Prolific ID: ${prolificID}
-                    </p>
-                    <h2 style="margin-top: 0; font-size: 32px;">Test Complete!</h2>
-                    <p style="font-size: 20px; color: #666;">Your score:</p>
-                    <div style="font-size: 80px; font-weight: bold; color: #667eea; margin: 20px 0;">
-                        ${maxSpan}
-                    </div>
-                    <p style="font-size: 24px; color: #ff6b6b; font-weight: 600; margin-top: 30px;">
-                        ⚠️ Please remember your score!
-                    </p>
-                    <p style="font-size: 18px; color: #666;">
-                        You will be asked to enter it in the survey.
-                    </p>
-                    <p style="font-size: 14px; color: #999; margin-top: 30px;">
-                        ✓ Data saved automatically
-                    </p>
-                </div>
-                <div class="close-instruction">
-                    <p style="margin: 0; font-size: 24px; font-weight: 600;">
-                        Close this window to continue the survey
-                    </p>
-                </div>
-            </div>
-        `;
+        <button class="button-large" onclick="clearLetters()">Clear</button>
+      </div>
+    `,
+    choices: ['Submit'],
+    on_load: () => {
+      selectedLetters = [];
+      window.selectLetter = (letter) => {
+        selectedLetters.push(letter);
+        document.getElementById('selected-display').textContent = selectedLetters.join(' ');
+      };
+      window.clearLetters = () => {
+        selectedLetters = [];
+        document.getElementById('selected-display').textContent = '';
+      };
     },
-    choices: "NO_KEYS"
+    on_finish: (data) => {
+      data.correct_letters = setLetters;
+      data.recalled_letters = selectedLetters;
+      const correct = JSON.stringify(setLetters) === JSON.stringify(selectedLetters);
+      data.recall_correct = correct;
+    }
+  });
+  
+  // Feedback
+  trials.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: () => {
+      const lastTrial = jsPsych.data.get().last(1).values()[0];
+      const correct = lastTrial.recall_correct;
+      const correctSeq = lastTrial.correct_letters.join(' ');
+      const yourSeq = lastTrial.recalled_letters.join(' ');
+      
+      if (correct) {
+        return `
+          <div class="instructions" style="text-align: center;">
+            <h3 style="color: #4CAF50;">✓ Correct!</h3>
+            <p>You remembered: <strong>${correctSeq}</strong></p>
+            <p style="margin-top: 30px;">Great! Now let's begin the actual test.</p>
+            <p style="color: #999;">In the real test, you won't get feedback.</p>
+          </div>
+        `;
+      } else {
+        return `
+          <div class="instructions" style="text-align: center;">
+            <h3 style="color: #ff6b6b;">Not quite</h3>
+            <p>Correct sequence: <strong>${correctSeq}</strong></p>
+            <p>You entered: <strong>${yourSeq || '(nothing)'}</strong></p>
+            <p style="margin-top: 30px;">Remember to click the letters in the exact order they appeared.</p>
+            <p style="color: #999;">Let's begin the actual test now.</p>
+          </div>
+        `;
+      }
+    },
+    choices: ['Start Main Test']
+  });
+  
+  return trials;
+}
+
+// Create main OSPAN set
+function createMainSet(setSize) {
+  const setLetters = [];
+  const trials = [];
+  
+  for (let i = 0; i < setSize; i++) {
+    // Math problem
+    const mathProb = generateMathProblem();
+    trials.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
+      choices: ['True', 'False'],
+      on_finish: data => {
+        const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
+        totalMathTrials++;
+        if (correct) correctMathTrials++;
+      }
+    });
+    
+    // Brief blank
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: '',
+      choices: "NO_KEYS",
+      trial_duration: 200
+    });
+    
+    // Letter
+    const letter = getRandomLetter();
+    setLetters.push(letter);
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `<div class="letter-display">${letter}</div>`,
+      choices: "NO_KEYS",
+      trial_duration: 800
+    });
+    
+    // Brief blank
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: '',
+      choices: "NO_KEYS",
+      trial_duration: 200
+    });
+  }
+  
+  // Recall (no feedback in main task)
+  trials.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `
+      <div class="instructions">
+        <h3>Recall the letters in order</h3>
+        <div id="selected-display" style="font-size: 32px; min-height: 50px; margin: 20px 0; color: #667eea; font-weight: bold;"></div>
+        <div class="letter-grid">
+          ${LETTERS.map(l => `<button class="letter-button" onclick="selectLetter('${l}')">${l}</button>`).join('')}
+        </div>
+        <button class="button-large" onclick="clearLetters()">Clear</button>
+      </div>
+    `,
+    choices: ['Submit'],
+    on_load: () => {
+      selectedLetters = [];
+      window.selectLetter = (letter) => {
+        selectedLetters.push(letter);
+        document.getElementById('selected-display').textContent = selectedLetters.join(' ');
+      };
+      window.clearLetters = () => {
+        selectedLetters = [];
+        document.getElementById('selected-display').textContent = '';
+      };
+    },
+    on_finish: (data) => {
+      data.set_size = setSize;
+      data.correct_letters = setLetters;
+      data.recalled_letters = selectedLetters;
+      
+      // Partial credit scoring
+      let score = 0;
+      for (let i = 0; i < setLetters.length; i++) {
+        if (selectedLetters[i] === setLetters[i]) {
+          score++;
+        }
+      }
+      ospanScore += score;
+      data.set_score = score;
+    }
+  });
+  
+  return trials;
+}
+
+// Build main task timeline
+const practiceTimeline = {
+  timeline: createPracticeSet()
 };
 
-jsPsych.run([prolificEntry, instructions, practiceTimeline, loopTimeline, endScreen]);
+// Main task: 2 sets each of lengths 3, 4, 5, 6, 7 = 10 sets total
+const setSizes = [3, 3, 4, 4, 5, 5, 6, 6, 7, 7];
+// Shuffle order
+for (let i = setSizes.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [setSizes[i], setSizes[j]] = [setSizes[j], setSizes[i]];
+}
+
+const mainTimeline = {
+  timeline: setSizes.map((size, index) => ({
+    timeline: [
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `<div class="center" style="font-size: 24px; color: #666;">Set ${index + 1} of ${setSizes.length}</div>`,
+        choices: "NO_KEYS",
+        trial_duration: 800
+      },
+      ...createMainSet(size)
+    ]
+  })).flat()
+};
+
+// Final screen
+const endScreen = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: () => {
+    mathAccuracy = totalMathTrials > 0 ? (correctMathTrials / totalMathTrials * 100).toFixed(1) : 0;
+    
+    const validData = mathAccuracy >= 85;
+    
+    // Send data to Google Sheets
+    fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prolific_id: prolificID,
+        score: ospanScore,
+        math_accuracy: mathAccuracy,
+        valid_data: validData
+      })
+    }).catch(error => {
+      console.log('Error sending data:', error);
+    });
+    
+    return `
+      <div class="final-screen">
+        <div class="score-box">
+          <p style="font-size: 16px; color: #999; margin-bottom: 10px;">
+            Prolific ID: ${prolificID}
+          </p>
+          <h2 style="margin-top: 0; font-size: 32px;">Test Complete!</h2>
+          
+          <div style="margin: 30px 0;">
+            <p style="font-size: 18px; color: #666;">OSPAN Score:</p>
+            <div style="font-size: 64px; font-weight: bold; color: #667eea;">
+              ${ospanScore}
+            </div>
+          </div>
+          
+          <div style="margin: 20px 0; padding: 15px; background: ${validData ? '#d4edda' : '#f8d7da'}; border-radius: 8px;">
+            <p style="font-size: 18px; color: #666; margin: 5px 0;">Math Accuracy:</p>
+            <p style="font-size: 28px; font-weight: bold; color: ${validData ? '#155724' : '#721c24'}; margin: 5px 0;">
+              ${mathAccuracy}%
+            </p>
+            ${validData ? 
+              '<p style="color: #155724; margin: 5px 0;">✓ Valid data</p>' : 
+              '<p style="color: #721c24; margin: 5px 0;">⚠ Below 85% threshold</p>'
+            }
+          </div>
+          
+          <p style="font-size: 24px; color: #ff6b6b; font-weight: 600; margin-top: 30px;">
+            ⚠️ Please remember your OSPAN score: ${ospanScore}
+          </p>
+          <p style="font-size: 18px; color: #666;">
+            You will be asked to enter it in the survey.
+          </p>
+          <p style="font-size: 14px; color: #999; margin-top: 20px;">
+            ✓ Data saved automatically
+          </p>
+        </div>
+        <div style="background: rgba(255,255,255,0.2); padding: 20px 30px; border-radius: 10px; margin-top: 30px; border: 2px solid rgba(255,255,255,0.3);">
+          <p style="margin: 0; font-size: 24px; font-weight: 600;">
+            Close this window to continue the survey
+          </p>
+        </div>
+      </div>
+    `;
+  },
+  choices: "NO_KEYS"
+};
+
+// Run experiment
+jsPsych.run([prolificEntry, instructions, practiceTimeline, mainTimeline, endScreen]);
 </script>
 </body>
 </html>
