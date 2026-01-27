@@ -80,6 +80,7 @@ const ceiling = 20;
 let currentSeq = "";
 let digitIndex = 0;
 let practiceCorrect = false;
+let prolificID = "";
 
 function makeDigits(n) {
     let s = "";
@@ -117,6 +118,33 @@ function recallTrial() {
         }
     };
 }
+
+// Prolific ID entry screen
+const prolificEntry = {
+    type: jsPsychSurveyHtmlForm,
+    html: `
+        <div class="center small" style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+            <h2>Welcome to the Digit Span Test</h2>
+            <p style="margin: 30px 0;">Please enter your Prolific ID to begin:</p>
+            <input name="prolific_id" 
+                   id="prolific-id-input" 
+                   type="text" 
+                   required
+                   placeholder="Enter Prolific ID"
+                   style="font-size: 24px; width: 100%; max-width: 300px; padding: 12px; text-align: center; border: 2px solid #667eea; border-radius: 8px;">
+            <br><br>
+            <button type="submit" style="font-size: 20px; padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                Continue
+            </button>
+        </div>
+    `,
+    on_load: function() {
+        document.getElementById('prolific-id-input').focus();
+    },
+    on_finish: data => {
+        prolificID = data.response?.prolific_id?.trim() || "";
+    }
+};
 
 // Instructions screen
 const instructions = {
@@ -249,9 +277,27 @@ const loopTimeline = {
 const endScreen = {
     type: jsPsychHtmlKeyboardResponse,
     stimulus: () => {
+        // Send data to Google Sheets
+        fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prolific_id: prolificID,
+                score: maxSpan
+            })
+        }).catch(error => {
+            console.log('Error sending data:', error);
+        });
+        
         return `
             <div class="final-screen">
                 <div class="score-box">
+                    <p style="font-size: 16px; color: #999; margin-bottom: 10px;">
+                        Prolific ID: ${prolificID}
+                    </p>
                     <h2 style="margin-top: 0; font-size: 32px;">Test Complete!</h2>
                     <p style="font-size: 20px; color: #666;">Your score:</p>
                     <div style="font-size: 80px; font-weight: bold; color: #667eea; margin: 20px 0;">
@@ -262,6 +308,9 @@ const endScreen = {
                     </p>
                     <p style="font-size: 18px; color: #666;">
                         You will be asked to enter it in the survey.
+                    </p>
+                    <p style="font-size: 14px; color: #999; margin-top: 30px;">
+                        ✓ Data saved automatically
                     </p>
                 </div>
                 <div class="close-instruction">
@@ -275,7 +324,7 @@ const endScreen = {
     choices: "NO_KEYS"
 };
 
-jsPsych.run([instructions, practiceTimeline, loopTimeline, endScreen]);
+jsPsych.run([prolificEntry, instructions, practiceTimeline, loopTimeline, endScreen]);
 </script>
 </body>
 </html>
