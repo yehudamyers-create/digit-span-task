@@ -120,7 +120,7 @@ body {
 .final-screen {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 60px 20px;
+  padding: 20px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -130,10 +130,10 @@ body {
 .score-box {
   background: white;
   color: #333;
-  padding: 40px 60px;
+  padding: 25px 40px;
   border-radius: 20px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-  margin: 20px;
+  margin: 10px;
 }
 .recall-container {
   padding: 10px 20px;
@@ -536,12 +536,8 @@ const practiceTimeline = {
 };
 
 // Main task: 2 sets each of lengths 3, 4, 5, 6, 7 = 10 sets total
-const setSizes = [3, 3, 4, 4, 5, 5, 6, 6, 7, 7];
-// Shuffle order
-for (let i = setSizes.length - 1; i > 0; i--) {
-  const j = Math.floor(Math.random() * (i + 1));
-  [setSizes[i], setSizes[j]] = [setSizes[j], setSizes[i]];
-}
+// Gradual increase: easy to hard, then repeat
+const setSizes = [3, 4, 5, 6, 7, 3, 4, 5, 6, 7];
 
 const mainTimeline = {
   timeline: setSizes.map((size, index) => ({
@@ -585,41 +581,41 @@ const endScreen = {
     return `
       <div class="final-screen">
         <div class="score-box">
-          <p style="font-size: 16px; color: #999; margin-bottom: 10px;">
+          <p style="font-size: 14px; color: #999; margin-bottom: 5px;">
             Prolific ID: ${prolificID}
           </p>
-          <h2 style="margin-top: 0; font-size: 32px;">Test Complete!</h2>
+          <h2 style="margin-top: 0; font-size: 28px; margin-bottom: 15px;">Test Complete!</h2>
           
-          <div style="margin: 30px 0;">
-            <p style="font-size: 18px; color: #666;">OSPAN Score:</p>
-            <div style="font-size: 64px; font-weight: bold; color: #667eea;">
+          <div style="margin: 15px 0;">
+            <p style="font-size: 16px; color: #666; margin: 3px 0;">OSPAN Score:</p>
+            <div style="font-size: 52px; font-weight: bold; color: #667eea;">
               ${ospanScore}
             </div>
           </div>
           
-          <div style="margin: 20px 0; padding: 15px; background: ${validData ? '#d4edda' : '#f8d7da'}; border-radius: 8px;">
-            <p style="font-size: 18px; color: #666; margin: 5px 0;">Math Accuracy:</p>
-            <p style="font-size: 28px; font-weight: bold; color: ${validData ? '#155724' : '#721c24'}; margin: 5px 0;">
+          <div style="margin: 15px 0; padding: 12px; background: ${validData ? '#d4edda' : '#f8d7da'}; border-radius: 8px;">
+            <p style="font-size: 16px; color: #666; margin: 3px 0;">Math Accuracy:</p>
+            <p style="font-size: 24px; font-weight: bold; color: ${validData ? '#155724' : '#721c24'}; margin: 3px 0;">
               ${mathAccuracy}%
             </p>
             ${validData ? 
-              '<p style="color: #155724; margin: 5px 0;">✓ Valid data</p>' : 
-              '<p style="color: #721c24; margin: 5px 0;">⚠ Below 85% threshold</p>'
+              '<p style="color: #155724; margin: 3px 0;">✓ Valid data</p>' : 
+              '<p style="color: #721c24; margin: 3px 0;">⚠ Below 85% threshold</p>'
             }
           </div>
           
-          <p style="font-size: 24px; color: #ff6b6b; font-weight: 600; margin-top: 30px;">
+          <p style="font-size: 20px; color: #ff6b6b; font-weight: 600; margin-top: 15px; margin-bottom: 8px;">
             ⚠️ Please remember your OSPAN score: ${ospanScore}
           </p>
-          <p style="font-size: 18px; color: #666;">
+          <p style="font-size: 16px; color: #666; margin: 5px 0;">
             You will be asked to enter it in the survey.
           </p>
-          <p style="font-size: 14px; color: #999; margin-top: 20px;">
+          <p style="font-size: 13px; color: #999; margin-top: 12px;">
             ✓ Data saved automatically
           </p>
         </div>
-        <div style="background: rgba(255,255,255,0.2); padding: 20px 30px; border-radius: 10px; margin-top: 30px; border: 2px solid rgba(255,255,255,0.3);">
-          <p style="margin: 0; font-size: 24px; font-weight: 600;">
+        <div style="background: rgba(255,255,255,0.2); padding: 15px 25px; border-radius: 10px; margin-top: 15px; border: 2px solid rgba(255,255,255,0.3);">
+          <p style="margin: 0; font-size: 20px; font-weight: 600;">
             Close this window to continue the survey
           </p>
         </div>
