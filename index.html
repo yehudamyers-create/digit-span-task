@@ -391,7 +391,7 @@ const instructions = {
       <h2 style="text-align: center;">Operation Span Test Instructions</h2>
       <p>In this test, you will do two things at the same time:</p>
       <ol style="text-align: left;">
-        <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false (you have 5 seconds per problem)</li>
+        <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false (you have 6 seconds per problem)</li>
         <li><strong>Remember symbols</strong> - After each math problem, a symbol will appear. Remember it!</li>
       </ol>
       <p>After a series of math problems and symbols, you will be asked to recall all the symbols <strong>in the order they appeared</strong>.</p>
@@ -424,7 +424,7 @@ function createPracticeSet() {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
-      trial_duration: 5000, // 5-second limit
+      trial_duration: 6000, // 6-second limit
       on_load: () => {
         document.addEventListener('keydown', function trueKeyHandler(e) {
           if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
@@ -555,7 +555,7 @@ function createMainSet(setSize) {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
-      trial_duration: 5000, // 5-second limit
+      trial_duration: 6000, // 6-second limit
       on_load: () => {
         document.addEventListener('keydown', function mathKeyHandler(e) {
           if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
