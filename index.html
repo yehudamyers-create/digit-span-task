@@ -472,9 +472,10 @@ function createPracticeSet() {
           ${SYMBOLS.map(s => `<button class="symbol-button" onclick="selectSymbol('${s}')">${s}</button>`).join('')}
         </div>
         <div style="text-align: center; margin-top: 5px;">
-          <button class="button-large" onclick="clearSymbols()">Clear</button>
+          <button class="button-large" onclick="backspaceSymbol()" style="background: #ff6b6b;">⌫ Backspace</button>
+          <button class="button-large" onclick="clearSymbols()">Clear All</button>
         </div>
-        <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit)</p>
+        <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit, Backspace to delete last)</p>
       </div>
     `,
     choices: ['Submit'],
@@ -484,14 +485,32 @@ function createPracticeSet() {
         selectedSymbols.push(symbol);
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
       };
+      window.backspaceSymbol = () => {
+        selectedSymbols.pop(); // Remove last symbol
+        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
+      };
       window.clearSymbols = () => {
         selectedSymbols = [];
         document.getElementById('selected-display').textContent = '';
       };
+      // Add keyboard backspace support
+      const backspaceHandler = (e) => {
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          window.backspaceSymbol();
+        }
+      };
+      document.addEventListener('keydown', backspaceHandler);
+      document._backspaceHandler = backspaceHandler;
+      
       enableEnterKey(0);
     },
     on_finish: (data) => {
       removeEnterKey();
+      if (document._backspaceHandler) {
+        document.removeEventListener('keydown', document._backspaceHandler);
+        document._backspaceHandler = null;
+      }
       data.correct_symbols = setSymbols;
       data.recalled_symbols = selectedSymbols;
       const correct = JSON.stringify(setSymbols) === JSON.stringify(selectedSymbols);
@@ -618,9 +637,10 @@ function createMainSet(setSize) {
           ${SYMBOLS.map(s => `<button class="symbol-button" onclick="selectSymbol('${s}')">${s}</button>`).join('')}
         </div>
         <div style="text-align: center; margin-top: 5px;">
-          <button class="button-large" onclick="clearSymbols()">Clear</button>
+          <button class="button-large" onclick="backspaceSymbol()" style="background: #ff6b6b;">⌫ Backspace</button>
+          <button class="button-large" onclick="clearSymbols()">Clear All</button>
         </div>
-        <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit)</p>
+        <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit, Backspace to delete last)</p>
       </div>
     `,
     choices: ['Submit'],
@@ -630,14 +650,32 @@ function createMainSet(setSize) {
         selectedSymbols.push(symbol);
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
       };
+      window.backspaceSymbol = () => {
+        selectedSymbols.pop(); // Remove last symbol
+        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
+      };
       window.clearSymbols = () => {
         selectedSymbols = [];
         document.getElementById('selected-display').textContent = '';
       };
+      // Add keyboard backspace support
+      const backspaceHandler = (e) => {
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          window.backspaceSymbol();
+        }
+      };
+      document.addEventListener('keydown', backspaceHandler);
+      document._backspaceHandler = backspaceHandler;
+      
       enableEnterKey(0);
     },
     on_finish: (data) => {
       removeEnterKey();
+      if (document._backspaceHandler) {
+        document.removeEventListener('keydown', document._backspaceHandler);
+        document._backspaceHandler = null;
+      }
       data.set_size = setSize;
       data.correct_symbols = setSymbols;
       data.recalled_symbols = selectedSymbols;
