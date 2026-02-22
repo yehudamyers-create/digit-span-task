@@ -161,10 +161,36 @@ let correctMathTrials = 0;
 let currentSetSymbols = [];
 let selectedSymbols = [];
 let allSymbolsUsed = [];
+let sessionID = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9); // Unique session ID
+let currentSetNumber = 0; // Track which set they're on
+let lastCompletedSet = 0; // Track last completed set
 
 // Check if Prolific ID is in URL parameter
 const urlParams = new URLSearchParams(window.location.search);
 const urlProlificID = urlParams.get('pid');
+
+// Helper function to send progress update
+function sendProgressUpdate(status, setNum) {
+  fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      session_id: sessionID,
+      prolific_id_from_url: urlProlificID || "N/A",
+      prolific_id_entered: prolificID,
+      status: status,
+      last_completed_set: setNum,
+      score: null,
+      math_accuracy: null,
+      valid_data: null
+    })
+  }).catch(error => {
+    console.log('Error sending progress:', error);
+  });
+}
 
 // Klingon-style symbols (12 distinct symbols using Unicode characters and special glyphs)
 // These are visually distinct abstract symbols
@@ -333,6 +359,27 @@ const prolificEntry = {
   },
   on_finish: data => {
     prolificID = data.response?.prolific_id?.trim() || "";
+    
+    // Send "Started" status to Google Sheets
+    fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        session_id: sessionID,
+        prolific_id_from_url: urlProlificID || "N/A",
+        prolific_id_entered: prolificID,
+        status: "Started",
+        last_completed_set: "Practice",
+        score: null,
+        math_accuracy: null,
+        valid_data: null
+      })
+    }).catch(error => {
+      console.log('Error sending start data:', error);
+    });
   }
 };
 
@@ -604,6 +651,10 @@ function createMainSet(setSize) {
       }
       ospanScore += score;
       data.set_score = score;
+      
+      // Track and send progress update after completing each set
+      lastCompletedSet = currentSetNumber;
+      sendProgressUpdate("In Progress", lastCompletedSet);
     }
   });
   
@@ -626,7 +677,10 @@ const mainTimeline = {
         type: jsPsychHtmlKeyboardResponse,
         stimulus: `<div class="center" style="font-size: 24px; color: #666;">Set ${index + 1} of ${setSizes.length}</div>`,
         choices: "NO_KEYS",
-        trial_duration: 800
+        trial_duration: 800,
+        on_start: () => {
+          currentSetNumber = index + 1; // Track which set we're starting
+        }
       },
       ...createMainSet(size)
     ]
@@ -649,8 +703,11 @@ const endScreen = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        session_id: sessionID,
         prolific_id_from_url: urlProlificID || "N/A",
         prolific_id_entered: prolificID,
+        status: "Completed",
+        last_completed_set: 10, // All 10 sets completed
         score: ospanScore,
         math_accuracy: mathAccuracy,
         valid_data: validData
