@@ -185,7 +185,7 @@ const SYMBOLS = [
 
 // Generate math problems (Unsworth et al. 2005 specifications)
 // Format: (A op B) op C = Result?
-// Results always 0-25, no negatives
+// Results always 0-25, no negatives at ANY step
 function generateMathProblem() {
   const operations = [
     { op: '+', fn: (a, b) => a + b },
@@ -196,15 +196,28 @@ function generateMathProblem() {
   
   let correctAnswer;
   let problem;
+  let attempts = 0;
   
-  // Keep generating until we get a valid problem (result 0-25, no negatives, integer)
+  // Keep generating until we get a valid problem (no negatives at any step, result 0-25, integer)
   do {
+    attempts++;
+    if (attempts > 100) {
+      // Fallback to simple addition if we can't generate a valid problem
+      const a = Math.floor(Math.random() * 10) + 1;
+      const b = Math.floor(Math.random() * 10) + 1;
+      const c = Math.floor(Math.random() * 5) + 1;
+      correctAnswer = a + b + c;
+      if (correctAnswer > 25) correctAnswer = 15;
+      problem = `(${a} + ${b}) + ${c}`;
+      break;
+    }
+    
     const op1 = operations[Math.floor(Math.random() * operations.length)];
     const op2 = operations[Math.floor(Math.random() * 3)]; // +, -, or ×
     
     let a = Math.floor(Math.random() * 9) + 1; // 1-9
     let b = Math.floor(Math.random() * 9) + 1; // 1-9
-    const c = Math.floor(Math.random() * 9) + 1; // 1-9
+    let c = Math.floor(Math.random() * 9) + 1; // 1-9
     
     // For division, ensure it divides evenly
     if (op1.op === '÷') {
@@ -212,9 +225,17 @@ function generateMathProblem() {
       a = b * (Math.floor(Math.random() * 5) + 1); // Ensure even division
     }
     
+    // For subtraction in first operation, ensure a >= b (no negative intermediate)
+    if (op1.op === '-' && a < b) {
+      [a, b] = [b, a]; // Swap so larger - smaller
+    }
+    
     const intermediate = op1.fn(a, b);
     
-    // Skip if intermediate would cause negative result with op2
+    // Skip if intermediate is negative or not an integer
+    if (intermediate < 0 || !Number.isInteger(intermediate)) continue;
+    
+    // For subtraction in second operation, ensure intermediate >= c (no negative result)
     if (op2.op === '-' && intermediate < c) continue;
     
     correctAnswer = op2.fn(intermediate, c);
@@ -323,7 +344,7 @@ const instructions = {
       <h2 style="text-align: center;">Operation Span Test Instructions</h2>
       <p>In this test, you will do two things at the same time:</p>
       <ol style="text-align: left;">
-        <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false (you have 4 seconds per problem)</li>
+        <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false (you have 5 seconds per problem)</li>
         <li><strong>Remember symbols</strong> - After each math problem, a symbol will appear. Remember it!</li>
       </ol>
       <p>After a series of math problems and symbols, you will be asked to recall all the symbols <strong>in the order they appeared</strong>.</p>
@@ -356,7 +377,7 @@ function createPracticeSet() {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
-      trial_duration: 4000, // 4-second limit per Unsworth et al. 2005
+      trial_duration: 5000, // 5-second limit
       on_load: () => {
         document.addEventListener('keydown', function trueKeyHandler(e) {
           if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
@@ -487,7 +508,7 @@ function createMainSet(setSize) {
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
-      trial_duration: 4000, // 4-second limit per Unsworth et al. 2005
+      trial_duration: 5000, // 5-second limit
       on_load: () => {
         document.addEventListener('keydown', function mathKeyHandler(e) {
           if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
