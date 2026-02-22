@@ -456,7 +456,7 @@ function createPracticeSet() {
       type: jsPsychHtmlKeyboardResponse,
       stimulus: `<div class="symbol-display">${symbol}</div>`,
       choices: "NO_KEYS",
-      trial_duration: 800
+      trial_duration: 1200
     });
   }
   
@@ -614,7 +614,7 @@ function createMainSet(setSize) {
       type: jsPsychHtmlKeyboardResponse,
       stimulus: `<div class="symbol-display">${symbol}</div>`,
       choices: "NO_KEYS",
-      trial_duration: 800
+      trial_duration: 1200
     });
     
     // Brief blank
@@ -715,7 +715,7 @@ const mainTimeline = {
         type: jsPsychHtmlKeyboardResponse,
         stimulus: `<div class="center" style="font-size: 24px; color: #666;">Set ${index + 1} of ${setSizes.length}</div>`,
         choices: "NO_KEYS",
-        trial_duration: 800,
+        trial_duration: 1200,
         on_start: () => {
           currentSetNumber = index + 1; // Track which set we're starting
         }
