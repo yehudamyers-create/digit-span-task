@@ -26,41 +26,45 @@ body {
   text-align: center;
   margin: 40px 0;
 }
-.letter-display {
-  font-size: 72px;
+.symbol-display {
+  font-size: 120px;
   font-weight: bold;
   text-align: center;
   color: #667eea;
   animation: fadeIn 0.3s ease-in;
+  font-family: 'Arial', sans-serif;
 }
 @keyframes fadeIn {
   from { opacity: 0; transform: scale(0.8); }
   to { opacity: 1; transform: scale(1); }
 }
-.letter-grid {
+.symbol-grid {
   display: grid;
-  grid-template-columns: repeat(4, 80px);
-  gap: 10px;
+  grid-template-columns: repeat(4, 100px);
+  gap: 12px;
   justify-content: center;
   margin: 10px auto;
 }
-.letter-button {
-  width: 80px;
-  height: 80px;
-  font-size: 28px;
+.symbol-button {
+  width: 100px;
+  height: 100px;
+  font-size: 48px;
   font-weight: bold;
-  border: 2px solid #667eea;
+  border: 3px solid #667eea;
   background: white;
   cursor: pointer;
   border-radius: 8px;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.letter-button:hover {
+.symbol-button:hover {
   background: #667eea;
   color: white;
   transform: scale(1.05);
 }
-.letter-button.selected {
+.symbol-button.selected {
   background: #667eea;
   color: white;
 }
@@ -154,58 +158,102 @@ let ospanScore = 0;
 let mathAccuracy = 0;
 let totalMathTrials = 0;
 let correctMathTrials = 0;
-let currentSetLetters = [];
-let selectedLetters = [];
-let allLettersUsed = [];
+let currentSetSymbols = [];
+let selectedSymbols = [];
+let allSymbolsUsed = [];
 
 // Check if Prolific ID is in URL parameter
 const urlParams = new URLSearchParams(window.location.search);
 const urlProlificID = urlParams.get('pid');
 
-// Letters (consonants only, no vowels)
-const LETTERS = ['F', 'H', 'J', 'K', 'L', 'N', 'P', 'Q', 'R', 'S', 'T', 'Y'];
+// Klingon-style symbols (12 distinct symbols using Unicode characters and special glyphs)
+// These are visually distinct abstract symbols
+const SYMBOLS = [
+  '▲', // Triangle up
+  '◆', // Diamond
+  '●', // Circle filled
+  '■', // Square filled
+  '★', // Star filled
+  '◄', // Triangle left
+  '►', // Triangle right
+  '▼', // Triangle down
+  '◇', // Diamond outline
+  '○', // Circle outline
+  '□', // Square outline
+  '☆'  // Star outline
+];
 
-// Generate math problems
+// Generate math problems (Unsworth et al. 2005 specifications)
+// Format: (A op B) op C = Result?
+// Results always 0-25, no negatives
 function generateMathProblem() {
   const operations = [
     { op: '+', fn: (a, b) => a + b },
     { op: '-', fn: (a, b) => a - b },
-    { op: '×', fn: (a, b) => a * b }
+    { op: '×', fn: (a, b) => a * b },
+    { op: '÷', fn: (a, b) => a / b }
   ];
   
-  const op1 = operations[Math.floor(Math.random() * operations.length)];
-  const op2 = operations[Math.floor(Math.random() * 2)]; // + or - for second
+  let correctAnswer;
+  let problem;
   
-  const a = Math.floor(Math.random() * 9) + 1;
-  const b = Math.floor(Math.random() * 9) + 1;
-  const c = Math.floor(Math.random() * 9) + 1;
+  // Keep generating until we get a valid problem (result 0-25, no negatives, integer)
+  do {
+    const op1 = operations[Math.floor(Math.random() * operations.length)];
+    const op2 = operations[Math.floor(Math.random() * 3)]; // +, -, or ×
+    
+    let a = Math.floor(Math.random() * 9) + 1; // 1-9
+    let b = Math.floor(Math.random() * 9) + 1; // 1-9
+    const c = Math.floor(Math.random() * 9) + 1; // 1-9
+    
+    // For division, ensure it divides evenly
+    if (op1.op === '÷') {
+      b = Math.floor(Math.random() * 3) + 1; // 1-3 for cleaner division
+      a = b * (Math.floor(Math.random() * 5) + 1); // Ensure even division
+    }
+    
+    const intermediate = op1.fn(a, b);
+    
+    // Skip if intermediate would cause negative result with op2
+    if (op2.op === '-' && intermediate < c) continue;
+    
+    correctAnswer = op2.fn(intermediate, c);
+    
+    // Check if valid (0-25, integer, non-negative)
+    if (correctAnswer >= 0 && correctAnswer <= 25 && Number.isInteger(correctAnswer)) {
+      problem = `(${a} ${op1.op} ${b}) ${op2.op} ${c}`;
+      break;
+    }
+  } while (true);
   
-  const intermediate = op1.fn(a, b);
-  const correctAnswer = op2.fn(intermediate, c);
-  
-  // Sometimes show correct answer, sometimes incorrect
+  // 50% show correct, 50% show incorrect (off by ±1 to ±3)
   const showCorrect = Math.random() > 0.5;
-  const displayedAnswer = showCorrect ? correctAnswer : correctAnswer + (Math.random() > 0.5 ? 1 : -1);
+  const offset = (Math.floor(Math.random() * 3) + 1) * (Math.random() > 0.5 ? 1 : -1);
+  let displayedAnswer = showCorrect ? correctAnswer : correctAnswer + offset;
+  
+  // Ensure displayed answer is also 0-25
+  if (displayedAnswer < 0) displayedAnswer = correctAnswer + Math.abs(offset);
+  if (displayedAnswer > 25) displayedAnswer = correctAnswer - Math.abs(offset);
   
   return {
-    problem: `(${a} ${op1.op} ${b}) ${op2.op} ${c} = ${displayedAnswer}`,
+    problem: `${problem} = ${displayedAnswer}?`,
     correct: showCorrect
   };
 }
 
-// Get random letter not used recently
-function getRandomLetter() {
-  let letter;
+// Get random symbol not used recently
+function getRandomSymbol() {
+  let symbol;
   let attempts = 0;
   do {
-    letter = LETTERS[Math.floor(Math.random() * LETTERS.length)];
+    symbol = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
     attempts++;
-  } while (allLettersUsed.includes(letter) && attempts < 20);
+  } while (allSymbolsUsed.includes(symbol) && attempts < 20);
   
-  allLettersUsed.push(letter);
-  if (allLettersUsed.length > 8) allLettersUsed.shift();
+  allSymbolsUsed.push(symbol);
+  if (allSymbolsUsed.length > 8) allSymbolsUsed.shift();
   
-  return letter;
+  return symbol;
 }
 
 // Helper function to enable Enter key for button clicks
@@ -220,7 +268,6 @@ function enableEnterKey(buttonIndex = 0) {
         }
       };
       document.addEventListener('keydown', handler);
-      // Store handler so we can remove it later
       document._enterHandler = handler;
     }
   }, 100);
@@ -256,7 +303,6 @@ const prolificEntry = {
   on_load: function() {
     const input = document.getElementById('prolific-id-input');
     input.focus();
-    // Enable Enter key to submit form
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -277,10 +323,10 @@ const instructions = {
       <h2 style="text-align: center;">Operation Span Test Instructions</h2>
       <p>In this test, you will do two things at the same time:</p>
       <ol style="text-align: left;">
-        <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false</li>
-        <li><strong>Remember letters</strong> - After each math problem, a letter will appear. Remember it!</li>
+        <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false (you have 4 seconds per problem)</li>
+        <li><strong>Remember symbols</strong> - After each math problem, a symbol will appear. Remember it!</li>
       </ol>
-      <p>After a series of math problems and letters, you will be asked to recall all the letters <strong>in the order they appeared</strong>.</p>
+      <p>After a series of math problems and symbols, you will be asked to recall all the symbols <strong>in the order they appeared</strong>.</p>
       <p style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
         <strong>Important:</strong> You must try your best on the math problems! Your math accuracy must be at least 85% for your data to be valid.
       </p>
@@ -300,18 +346,18 @@ const instructions = {
 // Create practice trial (1 combined practice set, length 3)
 function createPracticeSet() {
   const setSize = 3;
-  const setLetters = [];
+  const setSymbols = [];
   const trials = [];
   
   for (let i = 0; i < setSize; i++) {
-    // Math problem
+    // Math problem with 4-second time limit
     const mathProb = generateMathProblem();
     trials.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
+      trial_duration: 4000, // 4-second limit per Unsworth et al. 2005
       on_load: () => {
-        // Enable Enter for True (index 0), or could add T/F keys
         document.addEventListener('keydown', function trueKeyHandler(e) {
           if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
             e.preventDefault();
@@ -325,18 +371,22 @@ function createPracticeSet() {
         });
       },
       on_finish: data => {
-        const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
         totalMathTrials++;
-        if (correct) correctMathTrials++;
+        if (data.response === null) {
+          data.timeout = true;
+        } else {
+          const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
+          if (correct) correctMathTrials++;
+        }
       }
     });
     
-    // Letter
-    const letter = getRandomLetter();
-    setLetters.push(letter);
+    // Symbol
+    const symbol = getRandomSymbol();
+    setSymbols.push(symbol);
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
-      stimulus: `<div class="letter-display">${letter}</div>`,
+      stimulus: `<div class="symbol-display">${symbol}</div>`,
       choices: "NO_KEYS",
       trial_duration: 800
     });
@@ -347,36 +397,36 @@ function createPracticeSet() {
     type: jsPsychHtmlButtonResponse,
     stimulus: `
       <div class="recall-container">
-        <h3 style="text-align: center;">Recall the letters in order</h3>
-        <p style="text-align: center;">Click the letters in the order they appeared:</p>
-        <div id="selected-display" style="font-size: 32px; min-height: 40px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
-        <div class="letter-grid">
-          ${LETTERS.map(l => `<button class="letter-button" onclick="selectLetter('${l}')">${l}</button>`).join('')}
+        <h3 style="text-align: center;">Recall the symbols in order</h3>
+        <p style="text-align: center;">Click the symbols in the order they appeared:</p>
+        <div id="selected-display" style="font-size: 48px; min-height: 60px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
+        <div class="symbol-grid">
+          ${SYMBOLS.map(s => `<button class="symbol-button" onclick="selectSymbol('${s}')">${s}</button>`).join('')}
         </div>
         <div style="text-align: center; margin-top: 5px;">
-          <button class="button-large" onclick="clearLetters()">Clear</button>
+          <button class="button-large" onclick="clearSymbols()">Clear</button>
         </div>
         <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit)</p>
       </div>
     `,
     choices: ['Submit'],
     on_load: () => {
-      selectedLetters = [];
-      window.selectLetter = (letter) => {
-        selectedLetters.push(letter);
-        document.getElementById('selected-display').textContent = selectedLetters.join(' ');
+      selectedSymbols = [];
+      window.selectSymbol = (symbol) => {
+        selectedSymbols.push(symbol);
+        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
       };
-      window.clearLetters = () => {
-        selectedLetters = [];
+      window.clearSymbols = () => {
+        selectedSymbols = [];
         document.getElementById('selected-display').textContent = '';
       };
       enableEnterKey(0);
     },
     on_finish: (data) => {
       removeEnterKey();
-      data.correct_letters = setLetters;
-      data.recalled_letters = selectedLetters;
-      const correct = JSON.stringify(setLetters) === JSON.stringify(selectedLetters);
+      data.correct_symbols = setSymbols;
+      data.recalled_symbols = selectedSymbols;
+      const correct = JSON.stringify(setSymbols) === JSON.stringify(selectedSymbols);
       data.recall_correct = correct;
     }
   });
@@ -387,14 +437,14 @@ function createPracticeSet() {
     stimulus: () => {
       const lastTrial = jsPsych.data.get().last(1).values()[0];
       const correct = lastTrial.recall_correct;
-      const correctSeq = lastTrial.correct_letters.join(' ');
-      const yourSeq = lastTrial.recalled_letters.join(' ');
+      const correctSeq = lastTrial.correct_symbols.join(' ');
+      const yourSeq = lastTrial.recalled_symbols.join(' ');
       
       if (correct) {
         return `
           <div class="instructions" style="text-align: center;">
             <h3 style="color: #4CAF50;">✓ Correct!</h3>
-            <p>You remembered: <strong>${correctSeq}</strong></p>
+            <p style="font-size: 32px;">${correctSeq}</p>
             <p style="margin-top: 30px;">Great! Now let's begin the actual test.</p>
             <p style="color: #999;">In the real test, you won't get feedback.</p>
             <p style="text-align: center; color: #999; font-size: 14px; margin-top: 15px;">(Press Enter to continue)</p>
@@ -404,9 +454,9 @@ function createPracticeSet() {
         return `
           <div class="instructions" style="text-align: center;">
             <h3 style="color: #ff6b6b;">Not quite</h3>
-            <p>Correct sequence: <strong>${correctSeq}</strong></p>
-            <p>You entered: <strong>${yourSeq || '(nothing)'}</strong></p>
-            <p style="margin-top: 30px;">Remember to click the letters in the exact order they appeared.</p>
+            <p>Correct sequence: <span style="font-size: 32px;">${correctSeq}</span></p>
+            <p>You entered: <span style="font-size: 32px;">${yourSeq || '(nothing)'}</span></p>
+            <p style="margin-top: 30px;">Remember to click the symbols in the exact order they appeared.</p>
             <p style="color: #999;">Let's begin the actual test now.</p>
             <p style="text-align: center; color: #999; font-size: 14px; margin-top: 15px;">(Press Enter to continue)</p>
           </div>
@@ -427,18 +477,18 @@ function createPracticeSet() {
 
 // Create main OSPAN set
 function createMainSet(setSize) {
-  const setLetters = [];
+  const setSymbols = [];
   const trials = [];
   
   for (let i = 0; i < setSize; i++) {
-    // Math problem
+    // Math problem with 4-second time limit
     const mathProb = generateMathProblem();
     trials.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
+      trial_duration: 4000, // 4-second limit per Unsworth et al. 2005
       on_load: () => {
-        // Enable T/F and Enter keys
         document.addEventListener('keydown', function mathKeyHandler(e) {
           if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
             e.preventDefault();
@@ -452,9 +502,13 @@ function createMainSet(setSize) {
         });
       },
       on_finish: data => {
-        const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
         totalMathTrials++;
-        if (correct) correctMathTrials++;
+        if (data.response === null) {
+          data.timeout = true;
+        } else {
+          const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
+          if (correct) correctMathTrials++;
+        }
       }
     });
     
@@ -466,12 +520,12 @@ function createMainSet(setSize) {
       trial_duration: 200
     });
     
-    // Letter
-    const letter = getRandomLetter();
-    setLetters.push(letter);
+    // Symbol
+    const symbol = getRandomSymbol();
+    setSymbols.push(symbol);
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
-      stimulus: `<div class="letter-display">${letter}</div>`,
+      stimulus: `<div class="symbol-display">${symbol}</div>`,
       choices: "NO_KEYS",
       trial_duration: 800
     });
@@ -490,26 +544,26 @@ function createMainSet(setSize) {
     type: jsPsychHtmlButtonResponse,
     stimulus: `
       <div class="recall-container">
-        <h3 style="text-align: center;">Recall the letters in order</h3>
-        <div id="selected-display" style="font-size: 32px; min-height: 40px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
-        <div class="letter-grid">
-          ${LETTERS.map(l => `<button class="letter-button" onclick="selectLetter('${l}')">${l}</button>`).join('')}
+        <h3 style="text-align: center;">Recall the symbols in order</h3>
+        <div id="selected-display" style="font-size: 48px; min-height: 60px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
+        <div class="symbol-grid">
+          ${SYMBOLS.map(s => `<button class="symbol-button" onclick="selectSymbol('${s}')">${s}</button>`).join('')}
         </div>
         <div style="text-align: center; margin-top: 5px;">
-          <button class="button-large" onclick="clearLetters()">Clear</button>
+          <button class="button-large" onclick="clearSymbols()">Clear</button>
         </div>
         <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit)</p>
       </div>
     `,
     choices: ['Submit'],
     on_load: () => {
-      selectedLetters = [];
-      window.selectLetter = (letter) => {
-        selectedLetters.push(letter);
-        document.getElementById('selected-display').textContent = selectedLetters.join(' ');
+      selectedSymbols = [];
+      window.selectSymbol = (symbol) => {
+        selectedSymbols.push(symbol);
+        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
       };
-      window.clearLetters = () => {
-        selectedLetters = [];
+      window.clearSymbols = () => {
+        selectedSymbols = [];
         document.getElementById('selected-display').textContent = '';
       };
       enableEnterKey(0);
@@ -517,13 +571,13 @@ function createMainSet(setSize) {
     on_finish: (data) => {
       removeEnterKey();
       data.set_size = setSize;
-      data.correct_letters = setLetters;
-      data.recalled_letters = selectedLetters;
+      data.correct_symbols = setSymbols;
+      data.recalled_symbols = selectedSymbols;
       
       // Partial credit scoring
       let score = 0;
-      for (let i = 0; i < setLetters.length; i++) {
-        if (selectedLetters[i] === setLetters[i]) {
+      for (let i = 0; i < setSymbols.length; i++) {
+        if (selectedSymbols[i] === setSymbols[i]) {
           score++;
         }
       }
@@ -574,8 +628,8 @@ const endScreen = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prolific_id_from_url: urlProlificID || "N/A",  // From QuestionPro URL
-        prolific_id_entered: prolificID,                // Manually entered
+        prolific_id_from_url: urlProlificID || "N/A",
+        prolific_id_entered: prolificID,
         score: ospanScore,
         math_accuracy: mathAccuracy,
         valid_data: validData
