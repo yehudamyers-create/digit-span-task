@@ -165,6 +165,12 @@ let sessionID = 'session_' + Date.now() + '_' + Math.random().toString(36).subst
 let currentSetNumber = 0; // Track which set they're on
 let lastCompletedSet = 0; // Track last completed set
 
+// Per-set performance tracking
+let setMathCorrect = []; // Array to store math correct per set
+let setMathTotal = []; // Array to store math total per set
+let setRecallCorrect = []; // Array to store recall correct per set
+let setRecallTotal = []; // Array to store recall total per set
+
 // Check if Prolific ID is in URL parameter
 const urlParams = new URLSearchParams(window.location.search);
 const urlProlificID = urlParams.get('pid');
@@ -426,6 +432,10 @@ function createPracticeSet() {
   const setSymbols = [];
   const trials = [];
   
+  // Track math for this practice set
+  let setMathCorrectCount = 0;
+  let setMathTotalCount = 0;
+  
   for (let i = 0; i < setSize; i++) {
     // Math problem with 4-second time limit
     const mathProb = generateMathProblem();
@@ -449,11 +459,15 @@ function createPracticeSet() {
       },
       on_finish: data => {
         totalMathTrials++;
+        setMathTotalCount++;
         if (data.response === null) {
           data.timeout = true;
         } else {
           const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
-          if (correct) correctMathTrials++;
+          if (correct) {
+            correctMathTrials++;
+            setMathCorrectCount++;
+          }
         }
       }
     });
@@ -576,6 +590,10 @@ function createMainSet(setSize) {
   const setSymbols = [];
   const trials = [];
   
+  // Track math performance for this specific set
+  let setMathCorrectCount = 0;
+  let setMathTotalCount = 0;
+  
   for (let i = 0; i < setSize; i++) {
     // Math problem with 4-second time limit
     const mathProb = generateMathProblem();
@@ -599,11 +617,15 @@ function createMainSet(setSize) {
       },
       on_finish: data => {
         totalMathTrials++;
+        setMathTotalCount++;
         if (data.response === null) {
           data.timeout = true;
         } else {
           const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
-          if (correct) correctMathTrials++;
+          if (correct) {
+            correctMathTrials++;
+            setMathCorrectCount++;
+          }
         }
       }
     });
@@ -699,6 +721,12 @@ function createMainSet(setSize) {
       ospanScore += score;
       data.set_score = score;
       
+      // Store per-set performance
+      setMathCorrect.push(setMathCorrectCount);
+      setMathTotal.push(setMathTotalCount);
+      setRecallCorrect.push(score);
+      setRecallTotal.push(setSize);
+      
       // Track and send progress update after completing each set
       lastCompletedSet = currentSetNumber;
       sendProgressUpdate("In Progress", lastCompletedSet);
@@ -742,6 +770,13 @@ const endScreen = {
     
     const validData = mathAccuracy >= 85;
     
+    // Prepare per-set data as strings (e.g., "3/3", "2/4")
+    const setData = {};
+    for (let i = 0; i < 10; i++) {
+      setData[`set${i+1}_math`] = setMathCorrect[i] !== undefined ? `${setMathCorrect[i]}/${setMathTotal[i]}` : "";
+      setData[`set${i+1}_recall`] = setRecallCorrect[i] !== undefined ? `${setRecallCorrect[i]}/${setRecallTotal[i]}` : "";
+    }
+    
     // Send data to Google Sheets
     fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
       method: 'POST',
@@ -757,7 +792,8 @@ const endScreen = {
         last_completed_set: 10, // All 10 sets completed
         score: ospanScore,
         math_accuracy: mathAccuracy,
-        valid_data: validData
+        valid_data: validData,
+        ...setData // Spread the per-set data
       })
     }).catch(error => {
       console.log('Error sending data:', error);
