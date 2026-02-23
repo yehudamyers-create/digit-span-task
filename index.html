@@ -777,6 +777,28 @@ const endScreen = {
       setData[`set${i+1}_recall`] = setRecallCorrect[i] !== undefined ? `${setRecallCorrect[i]}/${setRecallTotal[i]}` : "";
     }
     
+    // DEBUG: Log the data being sent
+    console.log('=== OSPAN DATA BEING SENT ===');
+    console.log('Set Math Correct:', setMathCorrect);
+    console.log('Set Math Total:', setMathTotal);
+    console.log('Set Recall Correct:', setRecallCorrect);
+    console.log('Set Recall Total:', setRecallTotal);
+    console.log('Formatted Set Data:', setData);
+    
+    const payloadData = {
+      session_id: sessionID,
+      prolific_id_from_url: urlProlificID || "N/A",
+      prolific_id_entered: prolificID,
+      status: "Completed",
+      last_completed_set: 10, // All 10 sets completed
+      score: ospanScore,
+      math_accuracy: mathAccuracy,
+      valid_data: validData,
+      ...setData // Spread the per-set data
+    };
+    
+    console.log('Full Payload:', JSON.stringify(payloadData, null, 2));
+    
     // Send data to Google Sheets
     fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
       method: 'POST',
@@ -784,17 +806,7 @@ const endScreen = {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        session_id: sessionID,
-        prolific_id_from_url: urlProlificID || "N/A",
-        prolific_id_entered: prolificID,
-        status: "Completed",
-        last_completed_set: 10, // All 10 sets completed
-        score: ospanScore,
-        math_accuracy: mathAccuracy,
-        valid_data: validData,
-        ...setData // Spread the per-set data
-      })
+      body: JSON.stringify(payloadData)
     }).catch(error => {
       console.log('Error sending data:', error);
     });
