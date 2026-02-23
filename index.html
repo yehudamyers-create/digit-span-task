@@ -729,7 +729,32 @@ function createMainSet(setSize) {
       
       // Track and send progress update after completing each set
       lastCompletedSet = currentSetNumber;
-      sendProgressUpdate("In Progress", lastCompletedSet);
+      
+      // Send per-set data immediately after this set
+      const setDataUpdate = {};
+      setDataUpdate[`set${currentSetNumber}_math`] = `${setMathCorrectCount}/${setMathTotalCount}`;
+      setDataUpdate[`set${currentSetNumber}_recall`] = `${score}/${setSize}`;
+      
+      fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionID,
+          prolific_id_from_url: urlProlificID || "N/A",
+          prolific_id_entered: prolificID,
+          status: "In Progress",
+          last_completed_set: lastCompletedSet,
+          score: ospanScore, // Send cumulative score
+          math_accuracy: totalMathTrials > 0 ? (correctMathTrials / totalMathTrials * 100).toFixed(1) : 0,
+          valid_data: null,
+          ...setDataUpdate // Just this set's data
+        })
+      }).catch(error => {
+        console.log('Error sending set data:', error);
+      });
     }
   });
   
