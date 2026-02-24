@@ -161,69 +161,26 @@ let correctMathTrials = 0;
 let currentSetSymbols = [];
 let selectedSymbols = [];
 let allSymbolsUsed = [];
-let sessionID = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9); // Unique session ID
-let currentSetNumber = 0; // Track which set they're on
-let lastCompletedSet = 0; // Track last completed set
+let sessionID = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+let currentSetNumber = 0;
+let lastCompletedSet = 0;
 
 // Per-set performance tracking
-let setMathCorrect = []; // Array to store math correct per set
-let setMathTotal = []; // Array to store math total per set
-let setRecallCorrect = []; // Array to store recall correct per set
-let setRecallTotal = []; // Array to store recall total per set
+let setMathCorrect = [];
+let setMathTotal = [];
+let setRecallCorrect = [];
+let setRecallTotal = [];
 
 // Check if Prolific ID is in URL parameter
 const urlParams = new URLSearchParams(window.location.search);
 const urlProlificID = urlParams.get('pid');
 
-// Helper function to send progress update
-function sendProgressUpdate(status, setNum) {
-  fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      session_id: sessionID,
-      prolific_id_from_url: urlProlificID || "N/A",
-      prolific_id_entered: prolificID,
-      status: status,
-      last_completed_set: setNum,
-      score: null,
-      math_accuracy: null,
-      valid_data: null
-    })
-  }).catch(error => {
-    console.log('Error sending progress:', error);
-  });
-}
-
-// Hybrid symbol set: Mix of easy, medium, and hard symbols
-// Strategy: Balance between distinctiveness and encoding difficulty
-// Easy (4): Familiar shapes - ●■★▲
-// Medium (4): Less common but recognizable - ♣♠✖◆
-// Hard (4): Abstract, difficult to verbalize - ◐⬢⊕⊞
 const SYMBOLS = [
-  // Easy - familiar, simple shapes
-  '●', // Circle filled
-  '■', // Square filled
-  '★', // Star filled
-  '▲', // Triangle up
-  // Medium - recognizable but less common
-  '♣', // Club
-  '♠', // Spade
-  '✖', // X mark
-  '◆', // Diamond
-  // Hard - abstract, difficult to name
-  '◐', // Half circle
-  '⬢', // Hexagon
-  '⊕', // Circled plus
-  '⊞'  // Squared plus
+  '●', '■', '★', '▲',
+  '♣', '♠', '✖', '◆',
+  '◐', '⬢', '⊕', '⊞'
 ];
 
-// Generate math problems (Unsworth et al. 2005 specifications)
-// Format: (A op B) op C = Result?
-// Results always 0-25, no negatives at ANY step
 function generateMathProblem() {
   const operations = [
     { op: '+', fn: (a, b) => a + b },
@@ -236,11 +193,9 @@ function generateMathProblem() {
   let problem;
   let attempts = 0;
   
-  // Keep generating until we get a valid problem (no negatives at any step, result 0-25, integer)
   do {
     attempts++;
     if (attempts > 100) {
-      // Fallback to simple addition if we can't generate a valid problem
       const a = Math.floor(Math.random() * 10) + 1;
       const b = Math.floor(Math.random() * 10) + 1;
       const c = Math.floor(Math.random() * 5) + 1;
@@ -251,46 +206,39 @@ function generateMathProblem() {
     }
     
     const op1 = operations[Math.floor(Math.random() * operations.length)];
-    const op2 = operations[Math.floor(Math.random() * 3)]; // +, -, or ×
+    const op2 = operations[Math.floor(Math.random() * 3)];
     
-    let a = Math.floor(Math.random() * 9) + 1; // 1-9
-    let b = Math.floor(Math.random() * 9) + 1; // 1-9
-    let c = Math.floor(Math.random() * 9) + 1; // 1-9
+    let a = Math.floor(Math.random() * 9) + 1;
+    let b = Math.floor(Math.random() * 9) + 1;
+    let c = Math.floor(Math.random() * 9) + 1;
     
-    // For division, ensure it divides evenly
     if (op1.op === '÷') {
-      b = Math.floor(Math.random() * 3) + 1; // 1-3 for cleaner division
-      a = b * (Math.floor(Math.random() * 5) + 1); // Ensure even division
+      b = Math.floor(Math.random() * 3) + 1;
+      a = b * (Math.floor(Math.random() * 5) + 1);
     }
     
-    // For subtraction in first operation, ensure a >= b (no negative intermediate)
     if (op1.op === '-' && a < b) {
-      [a, b] = [b, a]; // Swap so larger - smaller
+      [a, b] = [b, a];
     }
     
     const intermediate = op1.fn(a, b);
     
-    // Skip if intermediate is negative or not an integer
     if (intermediate < 0 || !Number.isInteger(intermediate)) continue;
     
-    // For subtraction in second operation, ensure intermediate >= c (no negative result)
     if (op2.op === '-' && intermediate < c) continue;
     
     correctAnswer = op2.fn(intermediate, c);
     
-    // Check if valid (0-25, integer, non-negative)
     if (correctAnswer >= 0 && correctAnswer <= 25 && Number.isInteger(correctAnswer)) {
       problem = `(${a} ${op1.op} ${b}) ${op2.op} ${c}`;
       break;
     }
   } while (true);
   
-  // 50% show correct, 50% show incorrect (off by ±1 to ±3)
   const showCorrect = Math.random() > 0.5;
   const offset = (Math.floor(Math.random() * 3) + 1) * (Math.random() > 0.5 ? 1 : -1);
   let displayedAnswer = showCorrect ? correctAnswer : correctAnswer + offset;
   
-  // Ensure displayed answer is also 0-25
   if (displayedAnswer < 0) displayedAnswer = correctAnswer + Math.abs(offset);
   if (displayedAnswer > 25) displayedAnswer = correctAnswer - Math.abs(offset);
   
@@ -300,7 +248,6 @@ function generateMathProblem() {
   };
 }
 
-// Get random symbol not used recently
 function getRandomSymbol() {
   let symbol;
   let attempts = 0;
@@ -315,7 +262,6 @@ function getRandomSymbol() {
   return symbol;
 }
 
-// Helper function to enable Enter key for button clicks
 function enableEnterKey(buttonIndex = 0) {
   setTimeout(() => {
     const buttons = document.querySelectorAll('.jspsych-btn');
@@ -332,7 +278,6 @@ function enableEnterKey(buttonIndex = 0) {
   }, 100);
 }
 
-// Helper to remove Enter key handler
 function removeEnterKey() {
   if (document._enterHandler) {
     document.removeEventListener('keydown', document._enterHandler);
@@ -340,7 +285,6 @@ function removeEnterKey() {
   }
 }
 
-// Prolific ID entry - ALWAYS require manual entry for validation
 const prolificEntry = {
   type: jsPsychSurveyHtmlForm,
   html: `
@@ -372,7 +316,6 @@ const prolificEntry = {
   on_finish: data => {
     prolificID = data.response?.prolific_id?.trim() || "";
     
-    // Send "Started" status to Google Sheets
     fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
       method: 'POST',
       mode: 'no-cors',
@@ -395,7 +338,6 @@ const prolificEntry = {
   }
 };
 
-// Instructions
 const instructions = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
@@ -424,24 +366,21 @@ const instructions = {
   }
 };
 
-// Create practice trial (1 combined practice set, length 3)
 function createPracticeSet() {
   const setSize = 3;
   const setSymbols = [];
   const trials = [];
   
-  // Track math for this practice set
   let setMathCorrectCount = 0;
   let setMathTotalCount = 0;
   
   for (let i = 0; i < setSize; i++) {
-    // Math problem with 4-second time limit
     const mathProb = generateMathProblem();
     trials.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
-      trial_duration: 6000, // 6-second limit
+      trial_duration: 6000,
       on_load: () => {
         document.addEventListener('keydown', function trueKeyHandler(e) {
           if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
@@ -456,7 +395,6 @@ function createPracticeSet() {
         });
       },
       on_finish: data => {
-        // Practice trials: only track locally, don't count toward overall Math_Accuracy
         setMathTotalCount++;
         if (data.response === null) {
           data.timeout = true;
@@ -469,7 +407,6 @@ function createPracticeSet() {
       }
     });
     
-    // Symbol
     const symbol = getRandomSymbol();
     setSymbols.push(symbol);
     trials.push({
@@ -480,7 +417,6 @@ function createPracticeSet() {
     });
   }
   
-  // Recall with feedback
   trials.push({
     type: jsPsychHtmlButtonResponse,
     stimulus: `
@@ -506,14 +442,13 @@ function createPracticeSet() {
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
       };
       window.backspaceSymbol = () => {
-        selectedSymbols.pop(); // Remove last symbol
+        selectedSymbols.pop();
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
       };
       window.clearSymbols = () => {
         selectedSymbols = [];
         document.getElementById('selected-display').textContent = '';
       };
-      // Add keyboard backspace support
       const backspaceHandler = (e) => {
         if (e.key === 'Backspace') {
           e.preventDefault();
@@ -538,7 +473,6 @@ function createPracticeSet() {
     }
   });
   
-  // Feedback
   trials.push({
     type: jsPsychHtmlButtonResponse,
     stimulus: () => {
@@ -572,7 +506,6 @@ function createPracticeSet() {
     },
     choices: ['Start Main Test'],
     on_load: () => {
-      // Delay enabling Enter key to prevent skipping feedback
       setTimeout(() => {
         enableEnterKey(0);
       }, 500);
@@ -585,23 +518,20 @@ function createPracticeSet() {
   return trials;
 }
 
-// Create main OSPAN set
 function createMainSet(setSize) {
   const setSymbols = [];
   const trials = [];
   
-  // Track math performance for this specific set
   let setMathCorrectCount = 0;
   let setMathTotalCount = 0;
   
   for (let i = 0; i < setSize; i++) {
-    // Math problem with 4-second time limit
     const mathProb = generateMathProblem();
     trials.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
       choices: ['True', 'False'],
-      trial_duration: 6000, // 6-second limit
+      trial_duration: 6000,
       on_load: () => {
         document.addEventListener('keydown', function mathKeyHandler(e) {
           if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
@@ -630,7 +560,6 @@ function createMainSet(setSize) {
       }
     });
     
-    // Brief blank
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: '',
@@ -638,7 +567,6 @@ function createMainSet(setSize) {
       trial_duration: 200
     });
     
-    // Symbol
     const symbol = getRandomSymbol();
     setSymbols.push(symbol);
     trials.push({
@@ -648,7 +576,6 @@ function createMainSet(setSize) {
       trial_duration: 1200
     });
     
-    // Brief blank
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: '',
@@ -657,7 +584,6 @@ function createMainSet(setSize) {
     });
   }
   
-  // Recall (no feedback in main task)
   trials.push({
     type: jsPsychHtmlButtonResponse,
     stimulus: `
@@ -682,14 +608,13 @@ function createMainSet(setSize) {
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
       };
       window.backspaceSymbol = () => {
-        selectedSymbols.pop(); // Remove last symbol
+        selectedSymbols.pop();
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
       };
       window.clearSymbols = () => {
         selectedSymbols = [];
         document.getElementById('selected-display').textContent = '';
       };
-      // Add keyboard backspace support
       const backspaceHandler = (e) => {
         if (e.key === 'Backspace') {
           e.preventDefault();
@@ -711,7 +636,6 @@ function createMainSet(setSize) {
       data.correct_symbols = setSymbols;
       data.recalled_symbols = selectedSymbols;
       
-      // Partial credit scoring
       let score = 0;
       for (let i = 0; i < setSymbols.length; i++) {
         if (selectedSymbols[i] === setSymbols[i]) {
@@ -721,16 +645,13 @@ function createMainSet(setSize) {
       ospanScore += score;
       data.set_score = score;
       
-      // Store per-set performance
       setMathCorrect.push(setMathCorrectCount);
       setMathTotal.push(setMathTotalCount);
       setRecallCorrect.push(score);
       setRecallTotal.push(setSize);
       
-      // Track and send progress update after completing each set
       lastCompletedSet = currentSetNumber;
       
-      // Send per-set data immediately after this set
       const setDataUpdate = {};
       setDataUpdate[`set${currentSetNumber}_math`] = `${setMathCorrectCount}/${setMathTotalCount}`;
       setDataUpdate[`set${currentSetNumber}_recall`] = `${score}/${setSize}`;
@@ -747,10 +668,10 @@ function createMainSet(setSize) {
           prolific_id_entered: prolificID,
           status: "In Progress",
           last_completed_set: lastCompletedSet,
-          score: ospanScore, // Send cumulative score
+          score: ospanScore,
           math_accuracy: totalMathTrials > 0 ? (correctMathTrials / totalMathTrials * 100).toFixed(1) : 0,
           valid_data: null,
-          ...setDataUpdate // Just this set's data
+          ...setDataUpdate
         })
       }).catch(error => {
         console.log('Error sending set data:', error);
@@ -761,13 +682,10 @@ function createMainSet(setSize) {
   return trials;
 }
 
-// Build main task timeline
 const practiceTimeline = {
   timeline: createPracticeSet()
 };
 
-// Main task: 2 sets each of lengths 3, 4, 5, 6, 7 = 10 sets total
-// Gradual increase: easy to hard, then repeat
 const setSizes = [3, 4, 5, 6, 7, 3, 4, 5, 6, 7];
 
 const mainTimeline = {
@@ -779,7 +697,7 @@ const mainTimeline = {
         choices: "NO_KEYS",
         trial_duration: 1200,
         on_start: () => {
-          currentSetNumber = index + 1; // Track which set we're starting
+          currentSetNumber = index + 1;
         }
       },
       ...createMainSet(size)
@@ -787,7 +705,6 @@ const mainTimeline = {
   })).flat()
 };
 
-// Final screen
 const endScreen = {
   type: jsPsychHtmlKeyboardResponse,
   stimulus: () => {
@@ -795,36 +712,24 @@ const endScreen = {
     
     const validData = mathAccuracy >= 85;
     
-    // Prepare per-set data as strings (e.g., "3/3", "2/4")
     const setData = {};
     for (let i = 0; i < 10; i++) {
       setData[`set${i+1}_math`] = setMathCorrect[i] !== undefined ? `${setMathCorrect[i]}/${setMathTotal[i]}` : "";
       setData[`set${i+1}_recall`] = setRecallCorrect[i] !== undefined ? `${setRecallCorrect[i]}/${setRecallTotal[i]}` : "";
     }
     
-    // DEBUG: Log the data being sent
-    console.log('=== OSPAN DATA BEING SENT ===');
-    console.log('Set Math Correct:', setMathCorrect);
-    console.log('Set Math Total:', setMathTotal);
-    console.log('Set Recall Correct:', setRecallCorrect);
-    console.log('Set Recall Total:', setRecallTotal);
-    console.log('Formatted Set Data:', setData);
-    
     const payloadData = {
       session_id: sessionID,
       prolific_id_from_url: urlProlificID || "N/A",
       prolific_id_entered: prolificID,
       status: "Completed",
-      last_completed_set: 10, // All 10 sets completed
+      last_completed_set: 10,
       score: ospanScore,
       math_accuracy: mathAccuracy,
       valid_data: validData,
-      ...setData // Spread the per-set data
+      ...setData
     };
     
-    console.log('Full Payload:', JSON.stringify(payloadData, null, 2));
-    
-    // Send data to Google Sheets
     fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
       method: 'POST',
       mode: 'no-cors',
@@ -883,7 +788,6 @@ const endScreen = {
   choices: "NO_KEYS"
 };
 
-// Run experiment
 jsPsych.run([prolificEntry, instructions, practiceTimeline, mainTimeline, endScreen]);
 </script>
 </body>
