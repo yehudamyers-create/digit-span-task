@@ -198,21 +198,27 @@ function sendProgressUpdate(status, setNum) {
   });
 }
 
-// Klingon-style symbols (12 distinct symbols using Unicode characters and special glyphs)
-// These are visually distinct abstract symbols - no similar pairs
+// Hybrid symbol set: Mix of easy, medium, and hard symbols
+// Strategy: Balance between distinctiveness and encoding difficulty
+// Easy (4): Familiar shapes - ●■★▲
+// Medium (4): Less common but recognizable - ♣♠✖◆
+// Hard (4): Abstract, difficult to verbalize - ◐⬢⊕⊞
 const SYMBOLS = [
-  '▲', // Triangle up
+  // Easy - familiar, simple shapes
   '●', // Circle filled
   '■', // Square filled
   '★', // Star filled
-  '♦', // Diamond suit
-  '♥', // Heart
+  '▲', // Triangle up
+  // Medium - recognizable but less common
   '♣', // Club
   '♠', // Spade
-  '▼', // Triangle down
-  '◆', // Diamond
   '✖', // X mark
-  '◐'  // Half circle
+  '◆', // Diamond
+  // Hard - abstract, difficult to name
+  '◐', // Half circle
+  '⬢', // Hexagon
+  '⊕', // Circled plus
+  '⊞'  // Squared plus
 ];
 
 // Generate math problems (Unsworth et al. 2005 specifications)
