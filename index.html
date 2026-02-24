@@ -567,7 +567,10 @@ function createPracticeSet() {
     },
     choices: ['Start Main Test'],
     on_load: () => {
-      enableEnterKey(0);
+      // Delay enabling Enter key to prevent skipping feedback
+      setTimeout(() => {
+        enableEnterKey(0);
+      }, 500);
     },
     on_finish: () => {
       removeEnterKey();
