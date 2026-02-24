@@ -456,14 +456,13 @@ function createPracticeSet() {
         });
       },
       on_finish: data => {
-        totalMathTrials++;
+        // Practice trials: only track locally, don't count toward overall Math_Accuracy
         setMathTotalCount++;
         if (data.response === null) {
           data.timeout = true;
         } else {
           const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
           if (correct) {
-            correctMathTrials++;
             setMathCorrectCount++;
           }
         }
