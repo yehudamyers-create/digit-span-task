@@ -175,10 +175,20 @@ let setRecallTotal = [];
 const urlParams = new URLSearchParams(window.location.search);
 const urlProlificID = urlParams.get('pid');
 
+// 12 simple, visually distinct symbols - all easy to name and distinguish
 const SYMBOLS = [
-  '●', '■', '★', '▲',
-  '♣', '♠', '✖', '◆',
-  '◐', '⬢', '⊕', '⊞'
+  '●', // Circle
+  '■', // Square
+  '▲', // Triangle
+  '♥', // Heart
+  '★', // Star
+  '◆', // Diamond
+  '☽', // Moon
+  '✚', // Plus
+  '✖', // X
+  '♣', // Clover
+  '➜', // Arrow
+  '▬'  // Rectangle
 ];
 
 function generateMathProblem() {
@@ -395,6 +405,7 @@ function createPracticeSet() {
         });
       },
       on_finish: data => {
+        // Practice trials: only track locally, don't count toward overall Math_Accuracy
         setMathTotalCount++;
         if (data.response === null) {
           data.timeout = true;
