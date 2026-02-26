@@ -358,7 +358,7 @@ const instructions = {
         <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false (you have 6 seconds per problem)</li>
         <li><strong>Remember symbols</strong> - After each math problem, a symbol will appear. Remember it!</li>
       </ol>
-      <p>After a series of math problems and symbols, you will be asked to recall all the symbols <strong>in the order they appeared</strong>.</p>
+      <p>After a series of math problems and symbols, you will be asked to recall all the symbols <strong>in the order they appeared</strong>. You will have <strong>25 seconds</strong> to complete each recall.</p>
       <p style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
         <strong>Important:</strong> Please try your best on BOTH tasks. Your math accuracy should be at least 85% for your data to be valid.
       </p>
@@ -446,8 +446,10 @@ function createPracticeSet() {
       </div>
     `,
     choices: ['Submit'],
+    trial_duration: 25000,
     on_load: () => {
       selectedSymbols = [];
+      document._recallStartTime = Date.now();
       window.selectSymbol = (symbol) => {
         selectedSymbols.push(symbol);
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
@@ -468,7 +470,6 @@ function createPracticeSet() {
       };
       document.addEventListener('keydown', backspaceHandler);
       document._backspaceHandler = backspaceHandler;
-      
       enableEnterKey(0);
     },
     on_finish: (data) => {
@@ -612,8 +613,10 @@ function createMainSet(setSize) {
       </div>
     `,
     choices: ['Submit'],
+    trial_duration: 25000,
     on_load: () => {
       selectedSymbols = [];
+      document._recallStartTime = Date.now();
       window.selectSymbol = (symbol) => {
         selectedSymbols.push(symbol);
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
@@ -634,7 +637,6 @@ function createMainSet(setSize) {
       };
       document.addEventListener('keydown', backspaceHandler);
       document._backspaceHandler = backspaceHandler;
-      
       enableEnterKey(0);
     },
     on_finish: (data) => {
@@ -647,6 +649,8 @@ function createMainSet(setSize) {
       data.correct_symbols = setSymbols;
       data.recalled_symbols = selectedSymbols;
       
+      const recallTimeSeconds = ((Date.now() - document._recallStartTime) / 1000).toFixed(2);
+
       let score = 0;
       for (let i = 0; i < setSymbols.length; i++) {
         if (selectedSymbols[i] === setSymbols[i]) {
@@ -666,6 +670,7 @@ function createMainSet(setSize) {
       const setDataUpdate = {};
       setDataUpdate[`set${currentSetNumber}_math`] = `${setMathCorrectCount}/${setMathTotalCount}`;
       setDataUpdate[`set${currentSetNumber}_recall`] = `${score}/${setSize}`;
+      setDataUpdate[`set${currentSetNumber}_recall_time`] = recallTimeSeconds;
       
       fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
         method: 'POST',
