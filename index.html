@@ -170,25 +170,16 @@ let setMathCorrect = [];
 let setMathTotal = [];
 let setRecallCorrect = [];
 let setRecallTotal = [];
+let setRecallTime = []; // Track recall time in seconds
 
 // Check if Prolific ID is in URL parameter
 const urlParams = new URLSearchParams(window.location.search);
 const urlProlificID = urlParams.get('pid');
 
-// 12 simple, visually distinct symbols - all easy to name and distinguish
 const SYMBOLS = [
-  '●', // Circle
-  '■', // Square
-  '▲', // Triangle
-  '♥', // Heart
-  '★', // Star
-  '◆', // Diamond
-  '☽', // Moon
-  '✚', // Plus
-  '✖', // X
-  '♣', // Clover
-  '➜', // Arrow
-  '▬'  // Rectangle
+  '●', '■', '★', '▲',
+  '♣', '♠', '✖', '◆',
+  '◐', '⬢', '⊕', '⊞'
 ];
 
 function generateMathProblem() {
@@ -358,7 +349,7 @@ const instructions = {
         <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false (you have 6 seconds per problem)</li>
         <li><strong>Remember symbols</strong> - After each math problem, a symbol will appear. Remember it!</li>
       </ol>
-      <p>After a series of math problems and symbols, you will be asked to recall all the symbols <strong>in the order they appeared</strong>. You will have <strong>25 seconds</strong> to complete each recall.</p>
+      <p>After a series of math problems and symbols, you will be asked to recall all the symbols <strong>in the order they appeared</strong>.</p>
       <p style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
         <strong>Important:</strong> Please try your best on BOTH tasks. Your math accuracy should be at least 85% for your data to be valid.
       </p>
@@ -405,7 +396,6 @@ function createPracticeSet() {
         });
       },
       on_finish: data => {
-        // Practice trials: only track locally, don't count toward overall Math_Accuracy
         setMathTotalCount++;
         if (data.response === null) {
           data.timeout = true;
@@ -446,10 +436,8 @@ function createPracticeSet() {
       </div>
     `,
     choices: ['Submit'],
-    trial_duration: 25000,
     on_load: () => {
       selectedSymbols = [];
-      document._recallStartTime = Date.now();
       window.selectSymbol = (symbol) => {
         selectedSymbols.push(symbol);
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
@@ -470,6 +458,7 @@ function createPracticeSet() {
       };
       document.addEventListener('keydown', backspaceHandler);
       document._backspaceHandler = backspaceHandler;
+      
       enableEnterKey(0);
     },
     on_finish: (data) => {
@@ -613,10 +602,11 @@ function createMainSet(setSize) {
       </div>
     `,
     choices: ['Submit'],
-    trial_duration: 25000,
     on_load: () => {
+      // Start timing recall
+      window._recallStartTime = performance.now();
+      
       selectedSymbols = [];
-      document._recallStartTime = Date.now();
       window.selectSymbol = (symbol) => {
         selectedSymbols.push(symbol);
         document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
@@ -637,9 +627,13 @@ function createMainSet(setSize) {
       };
       document.addEventListener('keydown', backspaceHandler);
       document._backspaceHandler = backspaceHandler;
+      
       enableEnterKey(0);
     },
     on_finish: (data) => {
+      // Calculate recall time in seconds
+      const recallDuration = (performance.now() - window._recallStartTime) / 1000;
+      
       removeEnterKey();
       if (document._backspaceHandler) {
         document.removeEventListener('keydown', document._backspaceHandler);
@@ -649,8 +643,6 @@ function createMainSet(setSize) {
       data.correct_symbols = setSymbols;
       data.recalled_symbols = selectedSymbols;
       
-      const recallTimeSeconds = ((Date.now() - document._recallStartTime) / 1000).toFixed(2);
-
       let score = 0;
       for (let i = 0; i < setSymbols.length; i++) {
         if (selectedSymbols[i] === setSymbols[i]) {
@@ -664,13 +656,14 @@ function createMainSet(setSize) {
       setMathTotal.push(setMathTotalCount);
       setRecallCorrect.push(score);
       setRecallTotal.push(setSize);
+      setRecallTime.push(recallDuration.toFixed(2)); // Store recall time with 2 decimal places
       
       lastCompletedSet = currentSetNumber;
       
       const setDataUpdate = {};
       setDataUpdate[`set${currentSetNumber}_math`] = `${setMathCorrectCount}/${setMathTotalCount}`;
       setDataUpdate[`set${currentSetNumber}_recall`] = `${score}/${setSize}`;
-      setDataUpdate[`set${currentSetNumber}_recall_time`] = recallTimeSeconds;
+      setDataUpdate[`set${currentSetNumber}_recall_time`] = recallDuration.toFixed(2);
       
       fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
         method: 'POST',
@@ -732,6 +725,7 @@ const endScreen = {
     for (let i = 0; i < 10; i++) {
       setData[`set${i+1}_math`] = setMathCorrect[i] !== undefined ? `${setMathCorrect[i]}/${setMathTotal[i]}` : "";
       setData[`set${i+1}_recall`] = setRecallCorrect[i] !== undefined ? `${setRecallCorrect[i]}/${setRecallTotal[i]}` : "";
+      setData[`set${i+1}_recall_time`] = setRecallTime[i] !== undefined ? setRecallTime[i] : "";
     }
     
     const payloadData = {
