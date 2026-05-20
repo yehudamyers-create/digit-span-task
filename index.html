@@ -740,16 +740,19 @@ const endScreen = {
       ...setData
     };
     
-    fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payloadData)
-    }).catch(error => {
-      console.log('Error sending data:', error);
-    });
+    // Delay completion send to ensure Set 10 incremental update finishes first
+    setTimeout(() => {
+      fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payloadData)
+      }).catch(error => {
+        console.log('Error sending data:', error);
+      });
+    }, 1000); // Wait 1 second
     
     return `
       <div class="final-screen">
