@@ -137,20 +137,21 @@ body {
 }
 .recall-container {
   padding: 10px 20px;
-  position: relative;
 }
 .recall-container h3 {
   margin-top: 5px;
   margin-bottom: 10px;
 }
-/* Running math accuracy readout, shown during recall in the test phase */
+/* Running math accuracy readout, shown on the recall screen */
 .accuracy-readout {
-  position: absolute;
-  top: 0;
-  right: 10px;
-  font-size: 18px;
+  width: fit-content;
+  margin: 0 auto 10px auto;
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: #eef0fb;
+  color: #3b4a9c;
+  font-size: 17px;
   font-weight: 600;
-  color: #c0392b;
 }
 </style>
 </head>
@@ -190,6 +191,8 @@ let totalMathTrials = 0;
 let correctMathTrials = 0;
 let mathAccuracyErrors = 0;  // wrong true/false judgement
 let mathSpeedErrors = 0;     // failed to solve within the time limit
+let practiceMathTotal = 0;   // combined-practice math counters (not part of the score)
+let practiceMathCorrect = 0;
 let currentSetSymbols = [];
 let selectedSymbols = [];
 let allSymbolsUsed = [];
@@ -459,7 +462,7 @@ function makeRecallTrial(setSymbols, opts) {
   return {
     type: jsPsychHtmlButtonResponse,
     stimulus: function() {
-      const acc = runningMathAccuracy();
+      const acc = opts.accuracyFn ? opts.accuracyFn() : runningMathAccuracy();
       const readout = (opts.showAccuracy && acc !== null)
         ? `<div class="accuracy-readout">Math accuracy: ${acc}%</div>`
         : '';
@@ -738,7 +741,14 @@ function createCombinedPracticeSet(setSize) {
 
   for (let i = 0; i < setSize; i++) {
     const prob = generateMathProblem();
-    trials.push(...makeMathTrials(prob, { timed: true, isPractice: false }));
+    trials.push(...makeMathTrials(prob, {
+      timed: true,
+      isPractice: false,
+      onResult: (isCorrect) => {
+        practiceMathTotal++;
+        if (isCorrect) practiceMathCorrect++;
+      }
+    }));
 
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
@@ -763,7 +773,13 @@ function createCombinedPracticeSet(setSize) {
     });
   }
 
-  trials.push(makeRecallTrial(setSymbols, { showAccuracy: false, isPractice: true }));
+  trials.push(makeRecallTrial(setSymbols, {
+    showAccuracy: true,
+    isPractice: true,
+    accuracyFn: () => practiceMathTotal > 0
+      ? (practiceMathCorrect / practiceMathTotal * 100).toFixed(0)
+      : null
+  }));
 
   trials.push({
     type: jsPsychHtmlButtonResponse,
