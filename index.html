@@ -662,7 +662,7 @@ const practiceMathIntro = {
          Work out the answer in your head, then click <strong>Ready</strong>.</p>
       <p>A proposed answer will then appear, and you decide whether it is
          <strong>True</strong> or <strong>False</strong>.</p>
-     <p style="background:#fff3cd;padding:15px;border-radius:8px;border-left:4px solid #ffc107;">
+      <p style="background:#fff3cd;padding:15px;border-radius:8px;border-left:4px solid #ffc107;">
         Please solve each operation as quickly and accurately as you can.
       </p>
       <p style="text-align: center; color: #999; font-size: 14px;">(Press Enter or click below)</p>
@@ -892,7 +892,7 @@ function createMainSet(setSize) {
    TIMELINE ASSEMBLY
    ============================================================ */
 
-const shapePracticeTimeline = { timeline: createShapePracticeSet(2) };
+const shapePracticeTimeline = { timeline: [2, 3, 4, 5].map(n => createShapePracticeSet(n)).flat() };
 const mathPracticeTimeline = { timeline: createMathPracticeBlock() };
 const combinedPracticeTimeline = { timeline: createCombinedPracticeSet(2) };
 
