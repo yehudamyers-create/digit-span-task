@@ -2,23 +2,23 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Operation Span Test</title>
+<title>Modified Operation Span Test</title>
 <link href="https://unpkg.com/jspsych@7.3.0/css/jspsych.css" rel="stylesheet">
 <script src="https://unpkg.com/jspsych@7.3.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.0"></script>
 <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.0.0"></script>
 <style>
-body { 
-  background: #f4f6fb; 
-  font-family: Arial, sans-serif; 
+body {
+  background: #f4f6fb;
+  font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
 }
-.center { 
-  text-align: center; 
-  font-size: 48px; 
-  font-weight: 600; 
+.center {
+  text-align: center;
+  font-size: 48px;
+  font-weight: 600;
 }
 .math-problem {
   font-size: 36px;
@@ -63,10 +63,6 @@ body {
   background: #667eea;
   color: white;
   transform: scale(1.05);
-}
-.symbol-button.selected {
-  background: #667eea;
-  color: white;
 }
 .instructions {
   max-width: 700px;
@@ -141,10 +137,20 @@ body {
 }
 .recall-container {
   padding: 10px 20px;
+  position: relative;
 }
 .recall-container h3 {
   margin-top: 5px;
   margin-bottom: 10px;
+}
+/* Running math accuracy readout, shown during recall in the test phase */
+.accuracy-readout {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #c0392b;
 }
 </style>
 </head>
@@ -152,12 +158,38 @@ body {
 <script>
 const jsPsych = initJsPsych({ override_safe_mode: true });
 
-// Variables
+/* ============================================================
+   CONFIGURATION
+   ============================================================ */
+
+// Shape presentation duration (ms). Unsworth et al. used 800 ms for letters.
+// Verify against the source before changing; 1200 retained from prior version.
+const SYMBOL_DURATION = 1200;
+
+// Math-only practice trial count (Unsworth/Inquisit use 15)
+const MATH_PRACTICE_TRIALS = 15;
+
+// Bounds on the individually computed math time limit (ms).
+// NOT from Unsworth. Added to protect against a participant who rushes the
+// practice block and would otherwise receive an unusably short deadline
+// (a risk PsyToolkit flags explicitly). Report these bounds in the method.
+const MATH_LIMIT_FLOOR = 3000;
+const MATH_LIMIT_CEILING = 15000;
+
+// Fallback if practice yields no usable correct responses
+const MATH_LIMIT_FALLBACK = 8000;
+
+/* ============================================================
+   STATE
+   ============================================================ */
+
 let prolificID = "";
-let ospanScore = 0;
-let mathAccuracy = 0;
+let ospanScore = 0;          // partial-credit score (sum of items in correct position)
+let absoluteScore = 0;       // sum of set sizes for perfectly recalled sets
 let totalMathTrials = 0;
 let correctMathTrials = 0;
+let mathAccuracyErrors = 0;  // wrong true/false judgement
+let mathSpeedErrors = 0;     // failed to solve within the time limit
 let currentSetSymbols = [];
 let selectedSymbols = [];
 let allSymbolsUsed = [];
@@ -165,14 +197,17 @@ let sessionID = 'session_' + Date.now() + '_' + Math.random().toString(36).subst
 let currentSetNumber = 0;
 let lastCompletedSet = 0;
 
+// Individualised math deadline, computed from the math-only practice block
+let mathTimeLimit = MATH_LIMIT_FALLBACK;
+let practiceMathRTs = [];    // RTs from CORRECT practice responses only
+
 // Per-set performance tracking
 let setMathCorrect = [];
 let setMathTotal = [];
 let setRecallCorrect = [];
 let setRecallTotal = [];
-let setRecallTime = []; // Track recall time in seconds
+let setRecallTime = [];
 
-// Check if Prolific ID is in URL parameter
 const urlParams = new URLSearchParams(window.location.search);
 const urlProlificID = urlParams.get('pid');
 
@@ -182,6 +217,13 @@ const SYMBOLS = [
   '◐', '⬢', '⊕', '⊞'
 ];
 
+// Randomised set-size order (was fixed 3,4,5,6,7,3,4,5,6,7)
+const SET_SIZES = jsPsych.randomization.shuffle([3, 4, 5, 6, 7, 3, 4, 5, 6, 7]);
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+
 function generateMathProblem() {
   const operations = [
     { op: '+', fn: (a, b) => a + b },
@@ -189,11 +231,11 @@ function generateMathProblem() {
     { op: '×', fn: (a, b) => a * b },
     { op: '÷', fn: (a, b) => a / b }
   ];
-  
+
   let correctAnswer;
   let problem;
   let attempts = 0;
-  
+
   do {
     attempts++;
     if (attempts > 100) {
@@ -205,46 +247,46 @@ function generateMathProblem() {
       problem = `(${a} + ${b}) + ${c}`;
       break;
     }
-    
+
     const op1 = operations[Math.floor(Math.random() * operations.length)];
     const op2 = operations[Math.floor(Math.random() * 3)];
-    
+
     let a = Math.floor(Math.random() * 9) + 1;
     let b = Math.floor(Math.random() * 9) + 1;
     let c = Math.floor(Math.random() * 9) + 1;
-    
+
     if (op1.op === '÷') {
       b = Math.floor(Math.random() * 3) + 1;
       a = b * (Math.floor(Math.random() * 5) + 1);
     }
-    
+
     if (op1.op === '-' && a < b) {
       [a, b] = [b, a];
     }
-    
+
     const intermediate = op1.fn(a, b);
-    
+
     if (intermediate < 0 || !Number.isInteger(intermediate)) continue;
-    
     if (op2.op === '-' && intermediate < c) continue;
-    
+
     correctAnswer = op2.fn(intermediate, c);
-    
+
     if (correctAnswer >= 0 && correctAnswer <= 25 && Number.isInteger(correctAnswer)) {
       problem = `(${a} ${op1.op} ${b}) ${op2.op} ${c}`;
       break;
     }
   } while (true);
-  
+
   const showCorrect = Math.random() > 0.5;
   const offset = (Math.floor(Math.random() * 3) + 1) * (Math.random() > 0.5 ? 1 : -1);
   let displayedAnswer = showCorrect ? correctAnswer : correctAnswer + offset;
-  
+
   if (displayedAnswer < 0) displayedAnswer = correctAnswer + Math.abs(offset);
   if (displayedAnswer > 25) displayedAnswer = correctAnswer - Math.abs(offset);
-  
+
   return {
-    problem: `${problem} = ${displayedAnswer}?`,
+    equation: problem,              // shown alone in stage 1
+    displayedAnswer: displayedAnswer, // shown in stage 2
     correct: showCorrect
   };
 }
@@ -256,11 +298,16 @@ function getRandomSymbol() {
     symbol = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
     attempts++;
   } while (allSymbolsUsed.includes(symbol) && attempts < 20);
-  
+
   allSymbolsUsed.push(symbol);
   if (allSymbolsUsed.length > 8) allSymbolsUsed.shift();
-  
+
   return symbol;
+}
+
+function runningMathAccuracy() {
+  if (totalMathTrials === 0) return null;
+  return (correctMathTrials / totalMathTrials * 100).toFixed(0);
 }
 
 function enableEnterKey(buttonIndex = 0) {
@@ -286,16 +333,215 @@ function removeEnterKey() {
   }
 }
 
+function postToSheet(payload) {
+  fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(error => {
+    console.log('Error sending data:', error);
+  });
+}
+
+/* ============================================================
+   TWO-STAGE MATH TRIAL
+   Stage 1: equation alone, timed. Stage 2: proposed answer, untimed.
+   Only stage 1 is timed, per Unsworth's clarification.
+   ============================================================ */
+
+function makeMathTrials(mathProb, opts) {
+  // opts: { timed: bool, isPractice: bool, onResult: fn(correct, timedOut) }
+  const trials = [];
+
+  // ---- Stage 1: solve the equation (timed in test, untimed in practice)
+  trials.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `<div class="math-problem">${mathProb.equation} = ?</div>
+               <p style="text-align:center;color:#888;font-size:15px;">
+                 Work out the answer, then click Ready (or press Enter).
+               </p>`,
+    choices: ['Ready'],
+    trial_duration: function() {
+      return opts.timed ? mathTimeLimit : null;
+    },
+    on_load: () => { enableEnterKey(0); },
+    on_finish: data => {
+      removeEnterKey();
+      data.mospan_stage = 'solve';
+      data.timed_out = (data.response === null);
+      data.solve_rt = data.rt;
+    }
+  });
+
+  // ---- Stage 2: verify the proposed answer (never timed)
+  trials.push({
+    timeline: [{
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `<div class="math-problem">${mathProb.displayedAnswer}</div>`,
+      choices: ['True', 'False'],
+      trial_duration: null,
+      on_load: () => {
+        const handler = (e) => {
+          if (e.key === 't' || e.key === 'T' || e.key === 'Enter') {
+            e.preventDefault();
+            document.querySelectorAll('.jspsych-btn')[0].click();
+          } else if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            document.querySelectorAll('.jspsych-btn')[1].click();
+          }
+        };
+        document.addEventListener('keydown', handler);
+        document._verifyHandler = handler;
+      },
+      on_finish: data => {
+        if (document._verifyHandler) {
+          document.removeEventListener('keydown', document._verifyHandler);
+          document._verifyHandler = null;
+        }
+        data.mospan_stage = 'verify';
+        const isCorrect =
+          (data.response === 0 && mathProb.correct) ||
+          (data.response === 1 && !mathProb.correct);
+        data.math_correct = isCorrect;
+
+        // Capture the solve RT from the immediately preceding stage-1 trial
+        const solveTrial = jsPsych.data.get().filter({ mospan_stage: 'solve' }).last(1).values()[0];
+        if (opts.isPractice && isCorrect && solveTrial && solveTrial.solve_rt !== null) {
+          practiceMathRTs.push(solveTrial.solve_rt);
+        }
+        if (opts.onResult) opts.onResult(isCorrect, false);
+      }
+    }],
+    // Skip verification entirely if stage 1 timed out
+    conditional_function: function() {
+      const last = jsPsych.data.get().filter({ mospan_stage: 'solve' }).last(1).values()[0];
+      if (last && last.timed_out) {
+        if (opts.onResult) opts.onResult(false, true);
+        return false;
+      }
+      return true;
+    }
+  });
+
+  // ---- Practice feedback (practice blocks only)
+  if (opts.isPractice) {
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: function() {
+        const verify = jsPsych.data.get().filter({ mospan_stage: 'verify' }).last(1).values()[0];
+        const solve = jsPsych.data.get().filter({ mospan_stage: 'solve' }).last(1).values()[0];
+        if (solve && solve.timed_out) {
+          return `<div class="instructions" style="text-align:center;color:#ff6b6b;">
+                    <h3>Too slow</h3></div>`;
+        }
+        if (verify && verify.math_correct) {
+          return `<div class="instructions" style="text-align:center;color:#4CAF50;">
+                    <h3>Correct</h3></div>`;
+        }
+        return `<div class="instructions" style="text-align:center;color:#ff6b6b;">
+                  <h3>Incorrect</h3></div>`;
+      },
+      choices: "NO_KEYS",
+      trial_duration: 1200
+    });
+  }
+
+  return trials;
+}
+
+/* ============================================================
+   RECALL SCREEN
+   ============================================================ */
+
+function makeRecallTrial(setSymbols, opts) {
+  // opts: { showAccuracy: bool, setSize: int, isPractice: bool }
+  return {
+    type: jsPsychHtmlButtonResponse,
+    stimulus: function() {
+      const acc = runningMathAccuracy();
+      const readout = (opts.showAccuracy && acc !== null)
+        ? `<div class="accuracy-readout">Math accuracy: ${acc}%</div>`
+        : '';
+      return `
+        <div class="recall-container">
+          ${readout}
+          <h3 style="text-align: center;">Recall the shapes in order</h3>
+          <p style="text-align: center;">Click the shapes in the order they appeared:</p>
+          <div id="selected-display" style="font-size: 48px; min-height: 60px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
+          <div class="symbol-grid">
+            ${SYMBOLS.map(s => `<button class="symbol-button" onclick="selectSymbol('${s}')">${s}</button>`).join('')}
+          </div>
+          <div style="text-align: center; margin-top: 5px;">
+            <button class="button-large" onclick="backspaceSymbol()" style="background: #ff6b6b;">⌫ Backspace</button>
+            <button class="button-large" onclick="clearSymbols()">Clear All</button>
+          </div>
+          <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit, Backspace to delete last)</p>
+        </div>
+      `;
+    },
+    choices: ['Submit'],
+    on_load: () => {
+      window._recallStartTime = performance.now();
+      selectedSymbols = [];
+      window.selectSymbol = (symbol) => {
+        selectedSymbols.push(symbol);
+        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
+      };
+      window.backspaceSymbol = () => {
+        selectedSymbols.pop();
+        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
+      };
+      window.clearSymbols = () => {
+        selectedSymbols = [];
+        document.getElementById('selected-display').textContent = '';
+      };
+      const backspaceHandler = (e) => {
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          window.backspaceSymbol();
+        }
+      };
+      document.addEventListener('keydown', backspaceHandler);
+      document._backspaceHandler = backspaceHandler;
+      enableEnterKey(0);
+    },
+    on_finish: (data) => {
+      const recallDuration = (performance.now() - window._recallStartTime) / 1000;
+      removeEnterKey();
+      if (document._backspaceHandler) {
+        document.removeEventListener('keydown', document._backspaceHandler);
+        document._backspaceHandler = null;
+      }
+      data.set_size = setSymbols.length;
+      data.correct_symbols = setSymbols;
+      data.recalled_symbols = selectedSymbols.slice();
+
+      let score = 0;
+      for (let i = 0; i < setSymbols.length; i++) {
+        if (selectedSymbols[i] === setSymbols[i]) score++;
+      }
+      data.set_score = score;
+      data.recall_correct = (score === setSymbols.length);
+      data.recall_time = recallDuration.toFixed(2);
+    }
+  };
+}
+
+/* ============================================================
+   PROLIFIC ID ENTRY
+   ============================================================ */
+
 const prolificEntry = {
   type: jsPsychSurveyHtmlForm,
   html: `
     <div class="instructions">
-      <h2 style="text-align: center;">Welcome to the Operation Span Test</h2>
+      <h2 style="text-align: center;">Welcome to the Modified Operation Span Test</h2>
       <p style="text-align: center;">Please enter your Prolific ID:</p>
       <div style="text-align: center;">
-        <input name="prolific_id" 
-               id="prolific-id-input" 
-               type="text" 
+        <input name="prolific_id"
+               id="prolific-id-input"
+               type="text"
                required
                placeholder="Enter Prolific ID"
                style="font-size: 24px; width: 100%; max-width: 300px; padding: 12px; text-align: center; border: 2px solid #667eea; border-radius: 8px;">
@@ -316,269 +562,284 @@ const prolificEntry = {
   },
   on_finish: data => {
     prolificID = data.response?.prolific_id?.trim() || "";
-    
-    fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        session_id: sessionID,
-        prolific_id_from_url: urlProlificID || "N/A",
-        prolific_id_entered: prolificID,
-        status: "Started",
-        last_completed_set: "Practice",
-        score: null,
-        math_accuracy: null,
-        valid_data: null
-      })
-    }).catch(error => {
-      console.log('Error sending start data:', error);
+    postToSheet({
+      session_id: sessionID,
+      prolific_id_from_url: urlProlificID || "N/A",
+      prolific_id_entered: prolificID,
+      status: "Started",
+      last_completed_set: "Practice",
+      score: null,
+      math_accuracy: null
     });
   }
 };
 
-const instructions = {
+/* ============================================================
+   PRACTICE BLOCK 1: SHAPES ONLY
+   ============================================================ */
+
+const practiceShapesIntro = {
   type: jsPsychHtmlButtonResponse,
   stimulus: `
     <div class="instructions">
-      <h2 style="text-align: center;">Operation Span Test Instructions</h2>
-      <p>In this test, you will do two things at the same time:</p>
-      <ol style="text-align: left;">
-        <li><strong>Solve math problems</strong> - Decide if the equation shown is true or false (you have 6 seconds per problem)</li>
-        <li><strong>Remember symbols</strong> - After each math problem, a symbol will appear. Remember it!</li>
-      </ol>
-      <p>After a series of math problems and symbols, you will be asked to recall all the symbols <strong>in the order they appeared</strong>.</p>
-      <div style="background: #f8d7da; padding: 18px 20px; border-radius: 8px; border-left: 6px solid #dc3545; margin: 20px 0;">
-        <p style="margin: 0 0 8px 0; font-size: 20px; font-weight: bold; color: #721c24;">⚠️ Important: Math accuracy matters</p>
-        <p style="margin: 0; color: #721c24;">You must perform <strong>well on the math problems</strong> for your memory score to count. If your math accuracy is too low, your data <strong>cannot be used</strong>.</p>
-        <p style="margin: 8px 0 0 0; color: #721c24;">Please try your best on <strong>BOTH</strong> tasks throughout the entire test.</p>
-      </div>
-      <p style="text-align: center; margin-top: 20px;">This test has 10 sets and will take about 15-20 minutes. It's challenging by design, so don't worry if you find it difficult - just do your best throughout!</p>
-      <p style="text-align: center; margin-top: 20px;">Let's start with a practice round.</p>
-      <p style="text-align: center; color: #999; font-size: 14px;">(Press Enter or click the button below)</p>
+      <h2 style="text-align: center;">Part 1 of 3: Remembering shapes</h2>
+      <p>First, you will practise the memory part of the task on its own.</p>
+      <p>A series of shapes will appear one at a time. Your job is to remember them
+         <strong>in the order they appear</strong>.</p>
+      <p>After the last shape, you will see a grid of all twelve shapes. Click them in
+         the order they were shown.</p>
+      <p style="text-align: center; color: #999; font-size: 14px;">(Press Enter or click below)</p>
     </div>
   `,
-  choices: ['Begin Practice'],
-  on_load: () => {
-    enableEnterKey(0);
-  },
-  on_finish: () => {
-    removeEnterKey();
-  }
+  choices: ['Begin'],
+  on_load: () => enableEnterKey(0),
+  on_finish: () => removeEnterKey()
 };
 
-function createPracticeSet() {
-  const setSize = 3;
+function createShapePracticeSet(setSize) {
   const setSymbols = [];
   const trials = [];
-  
-  let setMathCorrectCount = 0;
-  let setMathTotalCount = 0;
-  
+
   for (let i = 0; i < setSize; i++) {
-    const mathProb = generateMathProblem();
-    trials.push({
-      type: jsPsychHtmlButtonResponse,
-      stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
-      choices: ['True', 'False'],
-      trial_duration: 6000,
-      on_load: () => {
-        document.addEventListener('keydown', function trueKeyHandler(e) {
-          if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
-            e.preventDefault();
-            document.querySelectorAll('.jspsych-btn')[0].click();
-            document.removeEventListener('keydown', trueKeyHandler);
-          } else if (e.key === 'f' || e.key === 'F') {
-            e.preventDefault();
-            document.querySelectorAll('.jspsych-btn')[1].click();
-            document.removeEventListener('keydown', trueKeyHandler);
-          }
-        });
-      },
-      on_finish: data => {
-        setMathTotalCount++;
-        if (data.response === null) {
-          data.timeout = true;
-        } else {
-          const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
-          if (correct) {
-            setMathCorrectCount++;
-          }
-        }
-      }
-    });
-    
     const symbol = getRandomSymbol();
     setSymbols.push(symbol);
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: `<div class="symbol-display">${symbol}</div>`,
       choices: "NO_KEYS",
-      trial_duration: 1200
+      trial_duration: SYMBOL_DURATION
+    });
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: '',
+      choices: "NO_KEYS",
+      trial_duration: 200
     });
   }
-  
-  trials.push({
-    type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div class="recall-container">
-        <h3 style="text-align: center;">Recall the symbols in order</h3>
-        <p style="text-align: center;">Click the symbols in the order they appeared:</p>
-        <div id="selected-display" style="font-size: 48px; min-height: 60px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
-        <div class="symbol-grid">
-          ${SYMBOLS.map(s => `<button class="symbol-button" onclick="selectSymbol('${s}')">${s}</button>`).join('')}
-        </div>
-        <div style="text-align: center; margin-top: 5px;">
-          <button class="button-large" onclick="backspaceSymbol()" style="background: #ff6b6b;">⌫ Backspace</button>
-          <button class="button-large" onclick="clearSymbols()">Clear All</button>
-        </div>
-        <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit, Backspace to delete last)</p>
-      </div>
-    `,
-    choices: ['Submit'],
-    on_load: () => {
-      selectedSymbols = [];
-      window.selectSymbol = (symbol) => {
-        selectedSymbols.push(symbol);
-        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
-      };
-      window.backspaceSymbol = () => {
-        selectedSymbols.pop();
-        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
-      };
-      window.clearSymbols = () => {
-        selectedSymbols = [];
-        document.getElementById('selected-display').textContent = '';
-      };
-      const backspaceHandler = (e) => {
-        if (e.key === 'Backspace') {
-          e.preventDefault();
-          window.backspaceSymbol();
-        }
-      };
-      document.addEventListener('keydown', backspaceHandler);
-      document._backspaceHandler = backspaceHandler;
-      
-      enableEnterKey(0);
-    },
-    on_finish: (data) => {
-      removeEnterKey();
-      if (document._backspaceHandler) {
-        document.removeEventListener('keydown', document._backspaceHandler);
-        document._backspaceHandler = null;
-      }
-      data.correct_symbols = setSymbols;
-      data.recalled_symbols = selectedSymbols;
-      const correct = JSON.stringify(setSymbols) === JSON.stringify(selectedSymbols);
-      data.recall_correct = correct;
-    }
-  });
-  
+
+  trials.push(makeRecallTrial(setSymbols, { showAccuracy: false, isPractice: true }));
+
   trials.push({
     type: jsPsychHtmlButtonResponse,
     stimulus: () => {
-      const lastTrial = jsPsych.data.get().last(1).values()[0];
-      const correct = lastTrial.recall_correct;
-      const correctSeq = lastTrial.correct_symbols.join(' ');
-      const yourSeq = lastTrial.recalled_symbols.join(' ');
-      
-      if (correct) {
-        return `
-          <div class="instructions" style="text-align: center;">
-            <h3 style="color: #4CAF50;">✓ Correct!</h3>
-            <p style="font-size: 32px;">${correctSeq}</p>
-            <p style="margin-top: 30px;">Great! Now let's begin the actual test.</p>
-            <p style="color: #999;">In the real test, you won't get feedback.</p>
-            <p style="text-align: center; color: #999; font-size: 14px; margin-top: 15px;">(Press Enter to continue)</p>
-          </div>
-        `;
-      } else {
-        return `
-          <div class="instructions" style="text-align: center;">
-            <h3 style="color: #ff6b6b;">Not quite</h3>
-            <p>Correct sequence: <span style="font-size: 32px;">${correctSeq}</span></p>
-            <p>You entered: <span style="font-size: 32px;">${yourSeq || '(nothing)'}</span></p>
-            <p style="margin-top: 30px;">Remember to click the symbols in the exact order they appeared.</p>
-            <p style="color: #999;">Let's begin the actual test now.</p>
-            <p style="text-align: center; color: #999; font-size: 14px; margin-top: 15px;">(Press Enter to continue)</p>
-          </div>
-        `;
+      const last = jsPsych.data.get().last(1).values()[0];
+      const correctSeq = last.correct_symbols.join(' ');
+      const yourSeq = last.recalled_symbols.join(' ');
+      if (last.recall_correct) {
+        return `<div class="instructions" style="text-align:center;">
+                  <h3 style="color:#4CAF50;">Correct</h3>
+                  <p style="font-size:32px;">${correctSeq}</p>
+                  <p style="color:#999;font-size:14px;">(Press Enter to continue)</p>
+                </div>`;
       }
+      return `<div class="instructions" style="text-align:center;">
+                <h3 style="color:#ff6b6b;">Not quite</h3>
+                <p>Correct order: <span style="font-size:32px;">${correctSeq}</span></p>
+                <p>You entered: <span style="font-size:32px;">${yourSeq || '(nothing)'}</span></p>
+                <p style="color:#999;font-size:14px;">(Press Enter to continue)</p>
+              </div>`;
     },
-    choices: ['Start Main Test'],
-    on_load: () => {
-      setTimeout(() => {
-        enableEnterKey(0);
-      }, 500);
-    },
-    on_finish: () => {
-      removeEnterKey();
-    }
+    choices: ['Continue'],
+    on_load: () => setTimeout(() => enableEnterKey(0), 400),
+    on_finish: () => removeEnterKey()
   });
-  
+
   return trials;
 }
+
+/* ============================================================
+   PRACTICE BLOCK 2: MATH ONLY
+   Untimed. RTs from correct responses set the individual deadline.
+   ============================================================ */
+
+const practiceMathIntro = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div class="instructions">
+      <h2 style="text-align: center;">Part 2 of 3: Math operations</h2>
+      <p>Now you will practise the math part on its own.</p>
+      <p>You will see a math operation such as <strong>(4 × 2) − 3 = ?</strong>.
+         Work out the answer in your head, then click <strong>Ready</strong>.</p>
+      <p>A proposed answer will then appear, and you decide whether it is
+         <strong>True</strong> or <strong>False</strong>.</p>
+      <p style="background:#fff3cd;padding:15px;border-radius:8px;border-left:4px solid #ffc107;">
+        Please solve these at your natural pace. The time you take here is used to set
+        how long you will have for the math operations later in the task, so working
+        unusually fast or unusually slowly now will make the rest of the task harder.
+      </p>
+      <p style="text-align: center; color: #999; font-size: 14px;">(Press Enter or click below)</p>
+    </div>
+  `,
+  choices: ['Begin'],
+  on_load: () => enableEnterKey(0),
+  on_finish: () => removeEnterKey()
+};
+
+function createMathPracticeBlock() {
+  const trials = [];
+  for (let i = 0; i < MATH_PRACTICE_TRIALS; i++) {
+    const prob = generateMathProblem();
+    trials.push(...makeMathTrials(prob, { timed: false, isPractice: true }));
+  }
+  return trials;
+}
+
+// Computes the individual deadline from the practice RTs
+const computeMathLimit = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: '',
+  choices: "NO_KEYS",
+  trial_duration: 1,
+  on_finish: () => {
+    if (practiceMathRTs.length >= 3) {
+      const n = practiceMathRTs.length;
+      const mean = practiceMathRTs.reduce((a, b) => a + b, 0) / n;
+      const variance = practiceMathRTs.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+      const sd = Math.sqrt(variance);
+      let limit = mean + 2.5 * sd;
+      limit = Math.max(MATH_LIMIT_FLOOR, Math.min(MATH_LIMIT_CEILING, limit));
+      mathTimeLimit = Math.round(limit);
+    } else {
+      mathTimeLimit = MATH_LIMIT_FALLBACK;
+    }
+    console.log('Math time limit set to', mathTimeLimit, 'ms from', practiceMathRTs.length, 'correct practice trials');
+  }
+};
+
+/* ============================================================
+   PRACTICE BLOCK 3: COMBINED
+   ============================================================ */
+
+const practiceCombinedIntro = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div class="instructions">
+      <h2 style="text-align: center;">Part 3 of 3: Both together</h2>
+      <p>Now you will do both tasks at once. Each math operation is followed by a shape
+         to remember.</p>
+      <p>From here on you will have a <strong>limited time</strong> to solve each math
+         operation, based on how long you took during practice. If you run out of time,
+         the operation is counted as an error and the task moves on.</p>
+      <p style="background:#fff3cd;padding:15px;border-radius:8px;border-left:4px solid #ffc107;">
+        <strong>Important:</strong> please try your best on <em>both</em> parts. It is not
+        enough to remember the shapes; you need to keep your math accuracy high as well.
+        Your running math accuracy will be shown on the recall screen so you can keep
+        track of it.
+      </p>
+      <p style="text-align: center; color: #999; font-size: 14px;">(Press Enter or click below)</p>
+    </div>
+  `,
+  choices: ['Begin practice'],
+  on_load: () => enableEnterKey(0),
+  on_finish: () => removeEnterKey()
+};
+
+function createCombinedPracticeSet(setSize) {
+  const setSymbols = [];
+  const trials = [];
+
+  for (let i = 0; i < setSize; i++) {
+    const prob = generateMathProblem();
+    trials.push(...makeMathTrials(prob, { timed: true, isPractice: false }));
+
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: '',
+      choices: "NO_KEYS",
+      trial_duration: 200
+    });
+
+    const symbol = getRandomSymbol();
+    setSymbols.push(symbol);
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `<div class="symbol-display">${symbol}</div>`,
+      choices: "NO_KEYS",
+      trial_duration: SYMBOL_DURATION
+    });
+    trials.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: '',
+      choices: "NO_KEYS",
+      trial_duration: 200
+    });
+  }
+
+  trials.push(makeRecallTrial(setSymbols, { showAccuracy: false, isPractice: true }));
+
+  trials.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: () => {
+      const last = jsPsych.data.get().last(1).values()[0];
+      const correctSeq = last.correct_symbols.join(' ');
+      const yourSeq = last.recalled_symbols.join(' ');
+      const head = last.recall_correct
+        ? `<h3 style="color:#4CAF50;">Correct</h3>`
+        : `<h3 style="color:#ff6b6b;">Not quite</h3>`;
+      return `<div class="instructions" style="text-align:center;">
+                ${head}
+                <p>Correct order: <span style="font-size:32px;">${correctSeq}</span></p>
+                <p>You entered: <span style="font-size:32px;">${yourSeq || '(nothing)'}</span></p>
+                <p style="margin-top:25px;">That is the end of practice. The real test begins next,
+                   and you will no longer receive feedback after each set.</p>
+                <p style="color:#999;font-size:14px;">(Press Enter to continue)</p>
+              </div>`;
+    },
+    choices: ['Start main test'],
+    on_load: () => setTimeout(() => enableEnterKey(0), 400),
+    on_finish: () => removeEnterKey()
+  });
+
+  return trials;
+}
+
+/* ============================================================
+   MAIN TEST
+   ============================================================ */
 
 function createMainSet(setSize) {
   const setSymbols = [];
   const trials = [];
-  
+
   let setMathCorrectCount = 0;
   let setMathTotalCount = 0;
-  
+
   for (let i = 0; i < setSize; i++) {
-    const mathProb = generateMathProblem();
-    trials.push({
-      type: jsPsychHtmlButtonResponse,
-      stimulus: `<div class="math-problem">${mathProb.problem}</div>`,
-      choices: ['True', 'False'],
-      trial_duration: 6000,
-      on_load: () => {
-        document.addEventListener('keydown', function mathKeyHandler(e) {
-          if (e.key === 'Enter' || e.key === 't' || e.key === 'T') {
-            e.preventDefault();
-            document.querySelectorAll('.jspsych-btn')[0].click();
-            document.removeEventListener('keydown', mathKeyHandler);
-          } else if (e.key === 'f' || e.key === 'F') {
-            e.preventDefault();
-            document.querySelectorAll('.jspsych-btn')[1].click();
-            document.removeEventListener('keydown', mathKeyHandler);
-          }
-        });
-      },
-      on_finish: data => {
+    const prob = generateMathProblem();
+
+    trials.push(...makeMathTrials(prob, {
+      timed: true,
+      isPractice: false,
+      onResult: (isCorrect, timedOut) => {
         totalMathTrials++;
         setMathTotalCount++;
-        if (data.response === null) {
-          data.timeout = true;
+        if (isCorrect) {
+          correctMathTrials++;
+          setMathCorrectCount++;
+        } else if (timedOut) {
+          mathSpeedErrors++;
         } else {
-          const correct = (data.response === 0 && mathProb.correct) || (data.response === 1 && !mathProb.correct);
-          if (correct) {
-            correctMathTrials++;
-            setMathCorrectCount++;
-          }
+          mathAccuracyErrors++;
         }
       }
-    });
-    
+    }));
+
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: '',
       choices: "NO_KEYS",
       trial_duration: 200
     });
-    
+
     const symbol = getRandomSymbol();
     setSymbols.push(symbol);
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: `<div class="symbol-display">${symbol}</div>`,
       choices: "NO_KEYS",
-      trial_duration: 1200
+      trial_duration: SYMBOL_DURATION
     });
-    
+
     trials.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: '',
@@ -586,130 +847,66 @@ function createMainSet(setSize) {
       trial_duration: 200
     });
   }
-  
-  trials.push({
-    type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div class="recall-container">
-        <h3 style="text-align: center;">Recall the symbols in order</h3>
-        <div id="selected-display" style="font-size: 48px; min-height: 60px; margin: 10px 0; color: #667eea; font-weight: bold; text-align: center;"></div>
-        <div class="symbol-grid">
-          ${SYMBOLS.map(s => `<button class="symbol-button" onclick="selectSymbol('${s}')">${s}</button>`).join('')}
-        </div>
-        <div style="text-align: center; margin-top: 5px;">
-          <button class="button-large" onclick="backspaceSymbol()" style="background: #ff6b6b;">⌫ Backspace</button>
-          <button class="button-large" onclick="clearSymbols()">Clear All</button>
-        </div>
-        <p style="text-align: center; color: #999; font-size: 14px; margin-top: 10px;">(Press Enter to submit, Backspace to delete last)</p>
-      </div>
-    `,
-    choices: ['Submit'],
-    on_load: () => {
-      // Start timing recall
-      window._recallStartTime = performance.now();
-      
-      selectedSymbols = [];
-      window.selectSymbol = (symbol) => {
-        selectedSymbols.push(symbol);
-        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
-      };
-      window.backspaceSymbol = () => {
-        selectedSymbols.pop();
-        document.getElementById('selected-display').textContent = selectedSymbols.join(' ');
-      };
-      window.clearSymbols = () => {
-        selectedSymbols = [];
-        document.getElementById('selected-display').textContent = '';
-      };
-      const backspaceHandler = (e) => {
-        if (e.key === 'Backspace') {
-          e.preventDefault();
-          window.backspaceSymbol();
-        }
-      };
-      document.addEventListener('keydown', backspaceHandler);
-      document._backspaceHandler = backspaceHandler;
-      
-      enableEnterKey(0);
-    },
-    on_finish: (data) => {
-      // Calculate recall time in seconds
-      const recallDuration = (performance.now() - window._recallStartTime) / 1000;
-      
-      removeEnterKey();
-      if (document._backspaceHandler) {
-        document.removeEventListener('keydown', document._backspaceHandler);
-        document._backspaceHandler = null;
-      }
-      data.set_size = setSize;
-      data.correct_symbols = setSymbols;
-      data.recalled_symbols = selectedSymbols;
-      
-      let score = 0;
-      for (let i = 0; i < setSymbols.length; i++) {
-        if (selectedSymbols[i] === setSymbols[i]) {
-          score++;
-        }
-      }
-      ospanScore += score;
-      data.set_score = score;
-      
-      setMathCorrect.push(setMathCorrectCount);
-      setMathTotal.push(setMathTotalCount);
-      setRecallCorrect.push(score);
-      setRecallTotal.push(setSize);
-      setRecallTime.push(recallDuration.toFixed(2)); // Store recall time with 2 decimal places
-      
-      lastCompletedSet = currentSetNumber;
-      
-      const setDataUpdate = {};
-      setDataUpdate[`set${currentSetNumber}_math`] = `${setMathCorrectCount}/${setMathTotalCount}`;
-      setDataUpdate[`set${currentSetNumber}_recall`] = `${score}/${setSize}`;
-      setDataUpdate[`set${currentSetNumber}_recall_time`] = recallDuration.toFixed(2);
-      
-      fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_id: sessionID,
-          prolific_id_from_url: urlProlificID || "N/A",
-          prolific_id_entered: prolificID,
-          status: "In Progress",
-          last_completed_set: lastCompletedSet,
-          score: ospanScore,
-          math_accuracy: totalMathTrials > 0 ? (correctMathTrials / totalMathTrials * 100).toFixed(1) : 0,
-          valid_data: null,
-          ...setDataUpdate
-        })
-      }).catch(error => {
-        console.log('Error sending set data:', error);
-      });
-    }
-  });
-  
+
+  const recall = makeRecallTrial(setSymbols, { showAccuracy: true, isPractice: false });
+  const originalOnFinish = recall.on_finish;
+  recall.on_finish = (data) => {
+    originalOnFinish(data);
+
+    ospanScore += data.set_score;
+    if (data.recall_correct) absoluteScore += data.set_size;
+
+    setMathCorrect.push(setMathCorrectCount);
+    setMathTotal.push(setMathTotalCount);
+    setRecallCorrect.push(data.set_score);
+    setRecallTotal.push(data.set_size);
+    setRecallTime.push(data.recall_time);
+
+    lastCompletedSet = currentSetNumber;
+
+    const setDataUpdate = {};
+    setDataUpdate[`set${currentSetNumber}_size`] = data.set_size;
+    setDataUpdate[`set${currentSetNumber}_math`] = `${setMathCorrectCount}/${setMathTotalCount}`;
+    setDataUpdate[`set${currentSetNumber}_recall`] = `${data.set_score}/${data.set_size}`;
+    setDataUpdate[`set${currentSetNumber}_recall_time`] = data.recall_time;
+
+    postToSheet({
+      session_id: sessionID,
+      prolific_id_from_url: urlProlificID || "N/A",
+      prolific_id_entered: prolificID,
+      status: "In Progress",
+      last_completed_set: lastCompletedSet,
+      score: ospanScore,
+      absolute_score: absoluteScore,
+      math_accuracy: totalMathTrials > 0 ? (correctMathTrials / totalMathTrials * 100).toFixed(1) : 0,
+      math_accuracy_errors: mathAccuracyErrors,
+      math_speed_errors: mathSpeedErrors,
+      math_time_limit_ms: mathTimeLimit,
+      ...setDataUpdate
+    });
+  };
+  trials.push(recall);
+
   return trials;
 }
 
-const practiceTimeline = {
-  timeline: createPracticeSet()
-};
+/* ============================================================
+   TIMELINE ASSEMBLY
+   ============================================================ */
 
-const setSizes = [3, 4, 5, 6, 7, 3, 4, 5, 6, 7];
+const shapePracticeTimeline = { timeline: createShapePracticeSet(2) };
+const mathPracticeTimeline = { timeline: createMathPracticeBlock() };
+const combinedPracticeTimeline = { timeline: createCombinedPracticeSet(2) };
 
 const mainTimeline = {
-  timeline: setSizes.map((size, index) => ({
+  timeline: SET_SIZES.map((size, index) => ({
     timeline: [
       {
         type: jsPsychHtmlKeyboardResponse,
-        stimulus: `<div class="center" style="font-size: 24px; color: #666;">Set ${index + 1} of ${setSizes.length}</div>`,
+        stimulus: `<div class="center" style="font-size: 24px; color: #666;">Set ${index + 1} of ${SET_SIZES.length}</div>`,
         choices: "NO_KEYS",
         trial_duration: 1200,
-        on_start: () => {
-          currentSetNumber = index + 1;
-        }
+        on_start: () => { currentSetNumber = index + 1; }
       },
       ...createMainSet(size)
     ]
@@ -719,67 +916,60 @@ const mainTimeline = {
 const endScreen = {
   type: jsPsychHtmlKeyboardResponse,
   stimulus: () => {
-    mathAccuracy = totalMathTrials > 0 ? (correctMathTrials / totalMathTrials * 100).toFixed(1) : 0;
-    
-    // Validity cutoff (internal only, not shown to participants)
-    const validData = mathAccuracy >= 70;
-    
+    const mathAccuracy = totalMathTrials > 0
+      ? (correctMathTrials / totalMathTrials * 100).toFixed(1)
+      : 0;
+
     const setData = {};
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < SET_SIZES.length; i++) {
+      setData[`set${i+1}_size`] = setRecallTotal[i] !== undefined ? setRecallTotal[i] : "";
       setData[`set${i+1}_math`] = setMathCorrect[i] !== undefined ? `${setMathCorrect[i]}/${setMathTotal[i]}` : "";
       setData[`set${i+1}_recall`] = setRecallCorrect[i] !== undefined ? `${setRecallCorrect[i]}/${setRecallTotal[i]}` : "";
       setData[`set${i+1}_recall_time`] = setRecallTime[i] !== undefined ? setRecallTime[i] : "";
     }
-    
-    const payloadData = {
-      session_id: sessionID,
-      prolific_id_from_url: urlProlificID || "N/A",
-      prolific_id_entered: prolificID,
-      status: "Completed",
-      last_completed_set: 10,
-      score: ospanScore,
-      math_accuracy: mathAccuracy,
-      valid_data: validData,
-      ...setData
-    };
-    
-    // Delay completion send to ensure Set 10 incremental update finishes first
+
     setTimeout(() => {
-      fetch('https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec', {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payloadData)
-      }).catch(error => {
-        console.log('Error sending data:', error);
+      postToSheet({
+        session_id: sessionID,
+        prolific_id_from_url: urlProlificID || "N/A",
+        prolific_id_entered: prolificID,
+        status: "Completed",
+        last_completed_set: SET_SIZES.length,
+        score: ospanScore,
+        absolute_score: absoluteScore,
+        math_accuracy: mathAccuracy,
+        math_accuracy_errors: mathAccuracyErrors,
+        math_speed_errors: mathSpeedErrors,
+        math_total_trials: totalMathTrials,
+        math_time_limit_ms: mathTimeLimit,
+        set_size_order: SET_SIZES.join('-'),
+        ...setData
       });
-    }, 1000); // Wait 1 second
-    
+    }, 1000);
+
     return `
       <div class="final-screen">
         <div class="score-box">
           <p style="font-size: 14px; color: #999; margin-bottom: 5px;">
             Prolific ID: ${prolificID}
           </p>
-          <h2 style="margin-top: 0; font-size: 28px; margin-bottom: 15px;">Test Complete!</h2>
-          
+          <h2 style="margin-top: 0; font-size: 28px; margin-bottom: 15px;">Test complete</h2>
+
           <div style="margin: 15px 0;">
-            <p style="font-size: 16px; color: #666; margin: 3px 0;">OSPAN Score:</p>
+            <p style="font-size: 16px; color: #666; margin: 3px 0;">MOSPAN Score:</p>
             <div style="font-size: 52px; font-weight: bold; color: #667eea;">
               ${ospanScore}
             </div>
           </div>
-          
+
           <p style="font-size: 20px; color: #ff6b6b; font-weight: 600; margin-top: 15px; margin-bottom: 8px;">
-            ⚠️ Please remember your OSPAN score: ${ospanScore}
+            Please remember your MOSPAN score: ${ospanScore}
           </p>
           <p style="font-size: 16px; color: #666; margin: 5px 0;">
             You will be asked to enter it in the survey.
           </p>
           <p style="font-size: 13px; color: #999; margin-top: 12px;">
-            ✓ Data saved automatically
+            Data saved automatically
           </p>
         </div>
         <div style="background: rgba(255,255,255,0.2); padding: 15px 25px; border-radius: 10px; margin-top: 15px; border: 2px solid rgba(255,255,255,0.3);">
@@ -793,7 +983,18 @@ const endScreen = {
   choices: "NO_KEYS"
 };
 
-jsPsych.run([prolificEntry, instructions, practiceTimeline, mainTimeline, endScreen]);
+jsPsych.run([
+  prolificEntry,
+  practiceShapesIntro,
+  shapePracticeTimeline,
+  practiceMathIntro,
+  mathPracticeTimeline,
+  computeMathLimit,
+  practiceCombinedIntro,
+  combinedPracticeTimeline,
+  mainTimeline,
+  endScreen
+]);
 </script>
 </body>
 </html>
