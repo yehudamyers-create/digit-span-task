@@ -917,9 +917,12 @@ const mainTimeline = {
     timeline: [
       {
         type: jsPsychHtmlKeyboardResponse,
-        stimulus: `<div class="center" style="font-size: 24px; color: #666;">Set ${index + 1} of ${SET_SIZES.length}</div>`,
+        stimulus: `<div class="center" style="font-size: 24px; color: #666;">Set ${index + 1} of ${SET_SIZES.length}</div>
+                   <p style="text-align:center;font-size:18px;color:#3b4a9c;margin-top:18px;">
+                     Remember: both parts matter. Keep your math accuracy high <em>and</em> remember the shapes in order.
+                   </p>`,
         choices: "NO_KEYS",
-        trial_duration: 1200,
+        trial_duration: 2500,
         on_start: () => { currentSetNumber = index + 1; }
       },
       ...createMainSet(size)
