@@ -153,6 +153,11 @@ body {
   font-size: 17px;
   font-weight: 600;
 }
+/* Below the 85% target */
+.accuracy-readout.below-target {
+  background: #fdecea;
+  color: #c0392b;
+}
 </style>
 </head>
 <body></body>
@@ -464,7 +469,7 @@ function makeRecallTrial(setSymbols, opts) {
     stimulus: function() {
       const acc = opts.accuracyFn ? opts.accuracyFn() : runningMathAccuracy();
       const readout = (opts.showAccuracy && acc !== null)
-        ? `<div class="accuracy-readout">Math accuracy: ${acc}%</div>`
+        ? `<div class="accuracy-readout${Number(acc) < 85 ? ' below-target' : ''}">Math accuracy: ${acc}%</div>`
         : '';
       return `
         <div class="recall-container">
@@ -723,7 +728,8 @@ const practiceCombinedIntro = {
          the operation is counted as an error and the task moves on.</p>
       <p style="background:#fff3cd;padding:15px;border-radius:8px;border-left:4px solid #ffc107;">
         <strong>Important:</strong> please try your best on <em>both</em> parts. It is not
-        enough to remember the shapes; you need to keep your math accuracy high as well.
+        enough to remember the shapes; you need to keep your math accuracy at
+        <strong>85% or above</strong> as well.
         Your running math accuracy will be shown on the recall screen so you can keep
         track of it.
       </p>
@@ -919,7 +925,7 @@ const mainTimeline = {
         type: jsPsychHtmlKeyboardResponse,
         stimulus: `<div class="center" style="font-size: 24px; color: #666;">Set ${index + 1} of ${SET_SIZES.length}</div>
                    <p style="text-align:center;font-size:18px;color:#3b4a9c;margin-top:18px;">
-                     Remember: both parts matter. Keep your math accuracy high <em>and</em> remember the shapes in order.
+                     Remember: both parts matter. Keep your math accuracy at 85% or above <em>and</em> remember the shapes in order.
                    </p>`,
         choices: "NO_KEYS",
         trial_duration: 2500,
