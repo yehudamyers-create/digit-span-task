@@ -153,6 +153,18 @@ body {
   font-size: 17px;
   font-weight: 600;
 }
+/* Label shown on practice recall screens */
+.practice-tag {
+  width: fit-content;
+  margin: 0 auto 8px auto;
+  padding: 3px 12px;
+  border-radius: 6px;
+  background: #fff3cd;
+  color: #8a6d00;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
 /* Below the 85% target */
 .accuracy-readout.below-target {
   background: #fdecea;
@@ -473,6 +485,7 @@ function makeRecallTrial(setSymbols, opts) {
         : '';
       return `
         <div class="recall-container">
+          ${opts.isPractice ? '<div class="practice-tag">PRACTICE</div>' : ''}
           ${readout}
           <h3 style="text-align: center;">Recall the shapes in order</h3>
           <p style="text-align: center;">Click the shapes in the order they appeared:</p>
@@ -800,12 +813,10 @@ function createCombinedPracticeSet(setSize) {
                 ${head}
                 <p>Correct order: <span style="font-size:32px;">${correctSeq}</span></p>
                 <p>You entered: <span style="font-size:32px;">${yourSeq || '(nothing)'}</span></p>
-                <p style="margin-top:25px;">That is the end of practice. The real test begins next,
-                   and you will no longer receive feedback after each set.</p>
                 <p style="color:#999;font-size:14px;">(Press Enter to continue)</p>
               </div>`;
     },
-    choices: ['Start main test'],
+    choices: ['Continue'],
     on_load: () => setTimeout(() => enableEnterKey(0), 400),
     on_finish: () => removeEnterKey()
   });
