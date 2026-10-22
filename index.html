@@ -184,8 +184,10 @@ const jsPsych = initJsPsych({ override_safe_mode: true });
 // Verify against the source before changing; 1200 retained from prior version.
 const SYMBOL_DURATION = 1200;
 
-// Math-only practice trial count (Unsworth/Inquisit use 15)
-const MATH_PRACTICE_TRIALS = 15;
+// Math-only practice trial count. Unsworth/Inquisit use 15; shortened to 10 at PI request.
+// The deadline below still needs at least MIN_RTS_FOR_LIMIT correct responses.
+const MATH_PRACTICE_TRIALS = 10;
+const MIN_RTS_FOR_LIMIT = 3;
 
 // Bounds on the individually computed math time limit (ms).
 // NOT from Unsworth. Added to protect against a participant who rushes the
@@ -237,8 +239,13 @@ const SYMBOLS = [
   '◐', '⬢', '⊕', '⊞'
 ];
 
-// Randomised set-size order (was fixed 3,4,5,6,7,3,4,5,6,7)
-const SET_SIZES = jsPsych.randomization.shuffle([3, 4, 5, 6, 7, 3, 4, 5, 6, 7]);
+// Randomised set-size order. Sizes 3-6, two of each (8 sets, 36 shapes, 36 math operations).
+// Set size 7 removed at PI request.
+const SET_SIZES = jsPsych.randomization.shuffle([3, 4, 5, 6, 3, 4, 5, 6]);
+
+// Practice set sizes
+const SHAPE_PRACTICE_SIZES = [3, 4, 6];
+const COMBINED_PRACTICE_SIZES = [3, 4];
 
 /* ============================================================
    HELPERS
@@ -710,10 +717,12 @@ const computeMathLimit = {
   choices: "NO_KEYS",
   trial_duration: 1,
   on_finish: () => {
-    if (practiceMathRTs.length >= 3) {
+    if (practiceMathRTs.length >= MIN_RTS_FOR_LIMIT) {
       const n = practiceMathRTs.length;
       const mean = practiceMathRTs.reduce((a, b) => a + b, 0) / n;
-      const variance = practiceMathRTs.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+      // Sample SD (n - 1): with only 10 practice trials the population SD would
+      // underestimate spread and give a slightly too-short deadline.
+      const variance = practiceMathRTs.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (n - 1);
       const sd = Math.sqrt(variance);
       let limit = mean + 2.5 * sd;
       limit = Math.max(MATH_LIMIT_FLOOR, Math.min(MATH_LIMIT_CEILING, limit));
@@ -935,7 +944,7 @@ const practiceEndScreen = {
         The real test starts now.
       </p>
       <ul style="text-align:left;">
-        <li>There are <strong>10 sets</strong>. Each has between 3 and 7 shapes.</li>
+        <li>There are <strong>8 sets</strong>. Each has between 3 and 6 shapes.</li>
         <li>You have a <strong>limited time</strong> to solve each math operation.</li>
         <li>Keep your math accuracy at <strong>85% or above</strong> and remember the shapes in order.</li>
         <li>Your math accuracy is shown on each recall screen. You will not get feedback on whether your recall was correct.</li>
@@ -948,9 +957,9 @@ const practiceEndScreen = {
   on_finish: () => removeEnterKey()
 };
 
-const shapePracticeTimeline = { timeline: [2, 3, 4, 5, 6, 7].map(n => createShapePracticeSet(n)).flat() };
+const shapePracticeTimeline = { timeline: SHAPE_PRACTICE_SIZES.map(n => createShapePracticeSet(n)).flat() };
 const mathPracticeTimeline = { timeline: createMathPracticeBlock() };
-const combinedPracticeTimeline = { timeline: createCombinedPracticeSet(2) };
+const combinedPracticeTimeline = { timeline: COMBINED_PRACTICE_SIZES.map(n => createCombinedPracticeSet(n)).flat() };
 
 const mainTimeline = {
   timeline: SET_SIZES.map((size, index) => ({
