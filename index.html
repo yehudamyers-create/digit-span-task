@@ -233,6 +233,64 @@ let setRecallTime = [];
 const urlParams = new URLSearchParams(window.location.search);
 const urlProlificID = urlParams.get('pid');
 
+/* ============================================================
+   FIRST-VISIT CHECK
+   Only first-time visitors may take the task. Two layers:
+   1. The Google Sheet: any row whose Prolific ID (from URL or typed)
+      matches is treated as a previous visit. Checked via doGet.
+   2. This browser: a flag set when the task starts.
+   IDs starting with TEST or BOT skip the browser flag (so the
+   researcher can run tests on one computer) but not the sheet check.
+   If the sheet cannot be reached within 6 s, the participant is let
+   through (the browser flag still applies) rather than wrongly blocked.
+   ============================================================ */
+
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxMsLJ14S5TAZsRSCRXgNlS8caB-SHbnhmjAk8mDj5DE4oKxAfoFCLTIUPDslEUE8kidA/exec';
+const STARTED_FLAG = 'mospan_started_v1';
+
+function isPlaceholderID(id) {
+  return !id || id === 'N/A' || id.includes('${') || id.includes('{{') || id.includes('%');
+}
+function isTestID(id) {
+  return /^(TEST|BOT)/i.test(id || '');
+}
+function browserFlagSet() {
+  try { return !!localStorage.getItem(STARTED_FLAG); } catch (e) { return false; }
+}
+function setBrowserFlag(id) {
+  if (isTestID(id)) return;
+  try { localStorage.setItem(STARTED_FLAG, id + '|' + new Date().toISOString()); } catch (e) {}
+}
+
+// Returns true (seen before), false (not seen) or null (could not check)
+async function seenInSheet(id) {
+  if (isPlaceholderID(id)) return false;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const res = await fetch(SHEET_URL + '?check=' + encodeURIComponent(id.trim()), { signal: ctrl.signal });
+    const json = await res.json();
+    return json.seen === true;
+  } catch (e) {
+    console.log('First-visit check unavailable:', e);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function showAlreadyTaken() {
+  document.body.innerHTML = `
+    <div style="max-width:620px;margin:80px auto;padding:30px;background:#fff;border-radius:12px;
+                font-family:Arial,sans-serif;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.08);">
+      <h2 style="color:#3b4a9c;">This task can only be taken once</h2>
+      <p style="font-size:17px;line-height:1.5;">Our records show that this task was already started
+         with this Prolific ID or on this device. Under the study rules it cannot be started again.</p>
+      <p style="font-size:17px;line-height:1.5;">Please close this window. If you think this is a
+         mistake, contact the researchers through Prolific.</p>
+    </div>`;
+}
+
 const SYMBOLS = [
   '●', '■', '★', '▲',
   '♣', '♠', '✖', '◆',
@@ -581,6 +639,32 @@ const prolificEntry = {
   on_load: function() {
     const input = document.getElementById('prolific-id-input');
     input.focus();
+
+    // Check the typed ID against the sheet before the form is accepted
+    let checked = false;
+    const submitGuard = async (e) => {
+      if (checked) return;                 // second pass: let the plugin handle it
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const typed = input.value.trim();
+      if (!typed) return;
+      const btn = document.querySelector('#jspsych-survey-html-form-next');
+      btn.disabled = true;
+      btn.value = 'Checking...';
+      const seen = (typed === urlProlificID) ? false : await seenInSheet(typed);  // URL ID was checked at load
+      if (seen === true) {
+        document.removeEventListener('submit', submitGuard, true);
+        showAlreadyTaken();
+        return;
+      }
+      checked = true;
+      document.removeEventListener('submit', submitGuard, true);
+      btn.disabled = false;
+      btn.value = 'Continue';
+      // Resubmit on the next tick: a form cannot be resubmitted from inside its own submit event
+      setTimeout(() => document.querySelector('#jspsych-survey-html-form').requestSubmit(btn), 0);
+    };
+    document.addEventListener('submit', submitGuard, true);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -590,6 +674,7 @@ const prolificEntry = {
   },
   on_finish: data => {
     prolificID = data.response?.prolific_id?.trim() || "";
+    setBrowserFlag(prolificID);
     postToSheet({
       session_id: sessionID,
       prolific_id_from_url: urlProlificID || "N/A",
@@ -1049,19 +1134,25 @@ const endScreen = {
   choices: "NO_KEYS"
 };
 
-jsPsych.run([
-  prolificEntry,
-  practiceShapesIntro,
-  shapePracticeTimeline,
-  practiceMathIntro,
-  mathPracticeTimeline,
-  computeMathLimit,
-  practiceCombinedIntro,
-  combinedPracticeTimeline,
-  practiceEndScreen,
-  mainTimeline,
-  endScreen
-]);
+// Start only for first-time visitors
+(async () => {
+  const urlID = urlProlificID || '';
+  if (browserFlagSet() && !isTestID(urlID)) { showAlreadyTaken(); return; }
+  if (await seenInSheet(urlID) === true) { showAlreadyTaken(); return; }
+  jsPsych.run([
+    prolificEntry,
+    practiceShapesIntro,
+    shapePracticeTimeline,
+    practiceMathIntro,
+    mathPracticeTimeline,
+    computeMathLimit,
+    practiceCombinedIntro,
+    combinedPracticeTimeline,
+    practiceEndScreen,
+    mainTimeline,
+    endScreen
+  ]);
+})();
 </script>
 </body>
 </html>
